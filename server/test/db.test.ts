@@ -5,8 +5,8 @@ import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import {
   addFavorite, deleteLibraryFiles, deleteStalePeaks, favoritePaths, filesByLibrary,
-  folderFiles, getEnabledLibraries, getPeaks, isIndexedFile, openDb, removeFavorite,
-  searchFiles, setEnabledLibraries, setPeaks, upsertFiles, type FileRow,
+  folderFiles, getEnabledLibraries, getPeaks, openDb, removeFavorite,
+  replaceLibraryFiles, searchFiles, setEnabledLibraries, setPeaks, upsertFiles, type FileRow,
 } from "../db";
 
 async function tempDb(): Promise<{ db: Database; cleanup: () => Promise<void> }> {
@@ -111,14 +111,27 @@ describe("favorites", () => {
     }
   });
 
-  test("cascade: deleting a file drops its favorite", async () => {
+  test("replaceLibraryFiles keeps favorites when the file is re-indexed", async () => {
     const { db, cleanup } = await tempDb();
     try {
       upsertFiles(db, [row()]);
       addFavorite(db, "Podcasts/ep-12.mp3");
-      deleteLibraryFiles(db, "Podcasts");
-      expect(favoritePaths(db, ["Podcasts"])).toEqual([]);
-      expect(isIndexedFile(db, "Podcasts/ep-12.mp3")).toBe(false);
+      replaceLibraryFiles(db, "Podcasts", [row()]);
+      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("replaceLibraryFiles drops favorites only for files that are gone", async () => {
+    const { db, cleanup } = await tempDb();
+    try {
+      upsertFiles(db, [row(), row({ path: "Podcasts/gone.mp3", name: "gone.mp3" })]);
+      addFavorite(db, "Podcasts/ep-12.mp3");
+      addFavorite(db, "Podcasts/gone.mp3");
+      replaceLibraryFiles(db, "Podcasts", [row()]);
+      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+      expect((db.query("SELECT COUNT(*) AS n FROM favorites").get() as { n: number }).n).toBe(1);
     } finally {
       await cleanup();
     }

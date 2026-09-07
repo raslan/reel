@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS idx_files_folder  ON files(folder);
 CREATE INDEX IF NOT EXISTS idx_files_library ON files(library);
 CREATE TABLE IF NOT EXISTS favorites (
-  path     TEXT PRIMARY KEY REFERENCES files(path) ON DELETE CASCADE,
+  path     TEXT PRIMARY KEY,
   added_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS peaks (
@@ -65,12 +65,23 @@ export function deleteLibraryFiles(db: Database, library: string): void {
   db.prepare("DELETE FROM files WHERE library = ?").run(library);
 }
 
-/** Atomically replace the index for `library` with `merged`, dropping stale peaks. */
+/**
+ * Atomically replace the index for `library` with `merged`.
+ * Favorites survive re-indexing; they are dropped only for files that no longer exist.
+ */
 export function replaceLibraryFiles(db: Database, library: string, merged: FileRow[]): void {
+  const next = new Set(merged.map((r) => r.path));
+  const removed = filesByLibrary(db, library)
+    .map((r) => r.path)
+    .filter((p) => !next.has(p));
   db.transaction(() => {
     deleteLibraryFiles(db, library);
     upsertFiles(db, merged);
     deleteStalePeaks(db);
+    if (removed.length > 0) {
+      const del = db.prepare("DELETE FROM favorites WHERE path = ?");
+      for (const p of removed) del.run(p);
+    }
   })();
 }
 

@@ -17,6 +17,7 @@ CLAUDE.md
 
 # Local dev data (dev runs outside docker)
 data/
+libraries/
 
 # Sample audio library for smoke tests (user-provided, local only)
 sample-library/
