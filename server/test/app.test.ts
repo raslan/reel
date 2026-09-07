@@ -2,6 +2,55 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { json, makeStack, waitForEvent, writeWav, type FavoritesBody, type LibrariesBody, type ListBody, type SearchBody } from "./helpers";
 
+/** Subscribe to the SSE stream. `connected` resolves on the first frame (server signals it); `until` when a frame matches. */
+async function readSSE(
+  base: string,
+  until: (event: string, data: string) => boolean,
+  timeoutMs = 8000,
+): Promise<{ connected: Promise<void>; until: Promise<void> }> {
+  const res = await fetch(`${base}/api/events`);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toContain("text/event-stream");
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let signalConnected: () => void = () => {};
+  const connected = new Promise<void>((r) => (signalConnected = r));
+  const untilP = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("SSE timeout")), timeoutMs);
+    void (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) throw new Error("SSE stream closed");
+          buf += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n\n")) !== -1) {
+            const frame = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            if (frame.startsWith(":")) {
+              signalConnected();
+              continue;
+            }
+            const event = /event: (.+)/.exec(frame)?.[1] ?? "message";
+            const data = /data: (.+)/.exec(frame)?.[1] ?? "";
+            if (until(event, data)) {
+              clearTimeout(timer);
+              await reader.cancel();
+              resolve();
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        clearTimeout(timer);
+        reject(err as Error);
+      }
+    })();
+  });
+  return { connected, until: untilP };
+}
+
 describe("GET /api/health", () => {
   test("returns ok", async () => {
     const s = await makeStack();
@@ -230,6 +279,60 @@ describe("GET /api/peaks", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ error: "decode failed" });
       expect((await fetch(`${s.base}/api/peaks?path=Podcasts/ghost.wav`)).status).toBe(404);
+    } finally {
+      await s.stopPeaks();
+      await s.cleanup();
+    }
+  });
+});
+
+describe("POST /api/rescan", () => {
+  test("returns 202 and picks up new files", async () => {
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    try {
+      await s.rescan("Podcasts");
+      await Bun.write(join(s.roots.libraries, "Podcasts/b.wav"), "x");
+      const changed = waitForEvent(s, "Podcasts", "library-changed");
+      const res = await fetch(`${s.base}/api/rescan`, { method: "POST" });
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ status: "started" });
+      await changed;
+      const list = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`));
+      expect(list.files.map((f) => f.path)).toEqual(["Podcasts/a.wav", "Podcasts/b.wav"]);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("SSE /api/events", () => {
+  test("delivers library-changed after a rescan that changed the index", async () => {
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    try {
+      await s.rescan("Podcasts");
+      const sse = await readSSE(s.base, (event, data) =>
+        event === "library-changed" && (JSON.parse(data) as { path: string }).path === "Podcasts",
+      );
+      await sse.connected;
+      await Bun.write(join(s.roots.libraries, "Podcasts/b.wav"), "x");
+      await fetch(`${s.base}/api/rescan`, { method: "POST" });
+      await sse.until;
+    } finally {
+      await s.cleanup();
+    }
+  });
+
+  test("delivers peaks-ready with the file path when a decode finishes", async () => {
+    const s = await makeStack({});
+    try {
+      await writeWav(join(s.roots.libraries, "Podcasts/tone.wav"), 1);
+      await s.rescan("Podcasts");
+      const sse = await readSSE(s.base, (event, data) =>
+        event === "peaks-ready" && (JSON.parse(data) as { path: string }).path === "Podcasts/tone.wav",
+      );
+      await sse.connected;
+      await fetch(`${s.base}/api/peaks?path=Podcasts/tone.wav`);
+      await sse.until;
     } finally {
       await s.stopPeaks();
       await s.cleanup();

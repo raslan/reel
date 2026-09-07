@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
@@ -159,5 +160,38 @@ export function createApp(ctx: AppCtx): Hono {
     peaks.ensure(path, file.mtime);
     return c.json({ status: "pending" }, 202);
   });
+
+  /* ---------- rescan ---------- */
+
+  app.post("/api/rescan", (c) => {
+    void (async () => {
+      for (const lib of getEnabledLibraries(db)) {
+        const d = await ctx.rescan(lib);
+        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib });
+      }
+    })();
+    return c.json({ status: "started" }, 202);
+  });
+
+  /* ---------- SSE ---------- */
+
+  app.get("/api/events", (c) =>
+    streamSSE(c, async (sse) => {
+      let unsubscribe = () => {};
+      unsubscribe = bus.subscribe((event, data) => {
+        void sse.writeSSE({ event, data: data === undefined ? "" : JSON.stringify(data) });
+      });
+      await sse.write(": open\n\n"); // first frame: signals the subscription is live
+      const heartbeat = setInterval(() => {
+        void sse.write(": hb\n\n");
+      }, 25_000);
+      try {
+        await new Promise<void>((resolve) => sse.onAbort(() => resolve()));
+      } finally {
+        clearInterval(heartbeat);
+        unsubscribe();
+      }
+    }),
+  );
   return app;
 }
