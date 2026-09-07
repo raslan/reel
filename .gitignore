@@ -1,0 +1,18 @@
+# Project docs (handoff, mockup, specs) — local only, not committed
+docs/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.*
+
+# Local dev data (dev runs outside docker)
+data/
+
+# OS
+.DS_Store
