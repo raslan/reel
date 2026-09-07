@@ -7,6 +7,10 @@ node_modules/
 # Build output
 dist/
 
+# Potential AI related files
+AGENTS.md
+CLAUDE.md
+
 # Environment
 .env
 .env.*
