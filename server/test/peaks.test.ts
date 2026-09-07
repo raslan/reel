@@ -1,19 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { applyWalk, walkLibrary } from "../index";
-import { makeStackLite, writeWav, type StackLite } from "./helpers";
-
-/** Resolve when the bus emits `event` for `path`. Subscribe before triggering the work. */
-function waitForEvent(s: StackLite, path: string, event: string): Promise<void> {
-  return new Promise((resolve) => {
-    const off = s.bus.subscribe((e, data) => {
-      if (e === event && (data as { path: string } | undefined)?.path === path) {
-        off();
-        resolve();
-      }
-    });
-  });
-}
+import { makeStackLite, waitForEvent, writeWav } from "./helpers";
 
 describe("PeaksService", () => {
   test("decodes a wav into 1024 normalized buckets (0.08–0.96)", async () => {

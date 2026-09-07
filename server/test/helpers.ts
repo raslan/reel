@@ -6,6 +6,10 @@ import { openDb, setEnabledLibraries } from "../db";
 import type { Roots } from "../config";
 import { createBus, type EventBus } from "../events";
 import { PeaksService } from "../peaks";
+import type { Hono } from "hono";
+import type { Server } from "bun";
+import { createApp } from "../app";
+import { rescanLibrary, type WalkDiff } from "../index";
 
 /** Temp dir with cleanup. */
 export async function makeTempDir(prefix: string): Promise<{ dir: string; cleanup: () => Promise<void> }> {
@@ -86,4 +90,81 @@ export async function makeStackLite(opts?: {
       await dataCleanup();
     },
   };
+}
+
+export interface Stack extends StackLite {
+  app: Hono;
+  server: Server<unknown>;
+  base: string;
+  rescan: (library: string) => Promise<WalkDiff>;
+}
+
+/* ---------- API response shapes (mirror the JSON contracts) ---------- */
+
+export interface LibraryInfo {
+  name: string;
+  path: string;
+  audioFiles: number;
+  enabled: boolean;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  duration: number | null;
+  size: number;
+}
+
+export interface ListBody {
+  folders: { name: string; path: string }[];
+  files: FileEntry[];
+}
+
+export interface LibrariesBody {
+  libraries: LibraryInfo[];
+}
+
+/** Parse a Response body as JSON with the expected shape. */
+export async function json<T>(res: Response): Promise<T> {
+  return (await res.json()) as T;
+}
+
+/** Full HTTP stack: Hono app behind Bun.serve on a random port. */
+export async function makeStack(opts?: {
+  files?: Record<string, string>;
+  enabled?: string[];
+}): Promise<Stack> {
+  const lite = await makeStackLite(opts);
+  const rescan = (lib: string) => rescanLibrary(lite.db, lite.roots, lib);
+  const app = createApp({
+    db: lite.db,
+    roots: lite.roots,
+    bus: lite.bus,
+    peaks: lite.peaks,
+    rescan,
+  });
+  const server = Bun.serve({ port: 0, fetch: app.fetch });
+  return {
+    ...lite,
+    app,
+    server,
+    base: `http://127.0.0.1:${server.port}`,
+    rescan,
+    cleanup: async () => {
+      server.stop(true);
+      await lite.cleanup();
+    },
+  };
+}
+
+/** Resolve when the bus emits `event` for `path`. Subscribe before triggering the work. */
+export function waitForEvent(s: StackLite, path: string, event: string): Promise<void> {
+  return new Promise((resolve) => {
+    const off = s.bus.subscribe((e, data) => {
+      if (e === event && (data as { path: string } | undefined)?.path === path) {
+        off();
+        resolve();
+      }
+    });
+  });
 }
