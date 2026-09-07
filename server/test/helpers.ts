@@ -165,14 +165,14 @@ export async function makeStack(opts?: {
   };
 }
 
-/** Resolve when the bus emits `event` for `path`. Subscribe before triggering the work. */
-export function waitForEvent(s: StackLite, path: string, event: string): Promise<void> {
+/** Resolve when the bus emits `event` for `path` (or unconditionally when `path` is null). Subscribe before triggering the work. */
+export function waitForEvent(s: StackLite, path: string | null, event: string): Promise<void> {
   return new Promise((resolve) => {
     const off = s.bus.subscribe((e, data) => {
-      if (e === event && (data as { path: string } | undefined)?.path === path) {
-        off();
-        resolve();
-      }
+      if (e !== event) return;
+      if (path !== null && (data as { path?: string } | undefined)?.path !== path) return;
+      off();
+      resolve();
     });
   });
 }
