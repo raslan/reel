@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run server/server.ts",
-    "test": "bun test server/test"
+    "test": "bun test server/test",
+    "check": "tsc --noEmit"
   },
   "dependencies": {
     "hono": "^4.6.0"

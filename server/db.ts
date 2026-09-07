@@ -65,6 +65,15 @@ export function deleteLibraryFiles(db: Database, library: string): void {
   db.prepare("DELETE FROM files WHERE library = ?").run(library);
 }
 
+/** Atomically replace the index for `library` with `merged`, dropping stale peaks. */
+export function replaceLibraryFiles(db: Database, library: string, merged: FileRow[]): void {
+  db.transaction(() => {
+    deleteLibraryFiles(db, library);
+    upsertFiles(db, merged);
+    deleteStalePeaks(db);
+  })();
+}
+
 export function filesByLibrary(db: Database, library: string): FileRow[] {
   return db
     .query("SELECT path, library, folder, name, size, mtime, duration FROM files WHERE library = ?")
@@ -77,6 +86,17 @@ export function folderFiles(db: Database, folder: string): FileRow[] {
       "SELECT path, library, folder, name, size, mtime, duration FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE",
     )
     .all(folder) as FileRow[];
+}
+
+export function countFilesByLibrary(db: Database, library: string): number {
+  return (db.query("SELECT COUNT(*) AS n FROM files WHERE library = ?").get(library) as { n: number }).n;
+}
+
+export function getFile(db: Database, path: string): { mtime: number; duration: number | null } | null {
+  const row = db.query("SELECT mtime, duration FROM files WHERE path = ?").get(path) as
+    | { mtime: number; duration: number | null }
+    | undefined;
+  return row ?? null;
 }
 
 /** Case-insensitive filename substring search, unbounded. `q` wildcards are escaped. */

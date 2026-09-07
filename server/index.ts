@@ -3,9 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import type { Roots } from "./config";
-import {
-  deleteLibraryFiles, deleteStalePeaks, filesByLibrary, upsertFiles, type FileRow,
-} from "./db";
+import { filesByLibrary, replaceLibraryFiles, type FileRow } from "./db";
 
 export const AUDIO_EXTS: Record<string, true> = {
   ".wav": true, ".mp3": true, ".ogg": true, ".oga": true,
@@ -33,10 +31,9 @@ export async function walkLibrary(roots: Roots, library: string): Promise<FileRo
   } catch {
     return rows; // library dir missing
   }
-  // Bun 1.3.x ignores Glob's cwd option — build an absolute pattern, escaping
-  // glob metacharacters in the base path (e.g. a folder named "Podcasts [2024]").
-  const pattern = base.replace(/[*?\[\]]/g, (m) => `\\${m}`) + "/**/*";
-  for await (const abs of new Glob(pattern, { absolute: true, onlyFiles: true }).scan()) {
+  // Bun 1.3.x: Glob options go on scan(), not the constructor.
+  const glob = new Glob("**/*");
+  for await (const abs of glob.scan({ cwd: base, absolute: true, onlyFiles: true })) {
     if (!(extname(abs) in AUDIO_EXTS)) continue;
     const st = await stat(abs);
     const rel = relative(roots.libraries, abs);
@@ -61,11 +58,7 @@ export function applyWalk(db: Database, library: string, walked: FileRow[]): Wal
     const prev = old.get(r.path);
     return prev && prev.mtime === r.mtime ? { ...r, duration: prev.duration } : r;
   });
-  db.transaction(() => {
-    deleteLibraryFiles(db, library);
-    upsertFiles(db, merged);
-    deleteStalePeaks(db);
-  })();
+  replaceLibraryFiles(db, library, merged);
   const walkedPaths = new Set(walked.map((r) => r.path));
   return {
     added: walked.filter((r) => !old.has(r.path)).length,

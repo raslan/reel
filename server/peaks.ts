@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import type { Roots } from "./config";
 import type { EventBus } from "./events";
-import { getPeaks, setPeaks } from "./db";
+import { getFile, getPeaks, setPeaks } from "./db";
 
 export const PEAK_BUCKETS = 1024;
 
@@ -59,9 +59,7 @@ export class PeaksService {
   private async pump(): Promise<void> {
     while (this.queue.length > 0 && this.running.size < 1) {
       const path = this.queue.shift()!;
-      const file = this.db
-        .query("SELECT mtime FROM files WHERE path = ?")
-        .get(path) as { mtime: number } | undefined;
+      const file = getFile(this.db, path);
       if (!file) continue; // file disappeared before its turn
       this.running.add(path);
       void this.runJob(path, file.mtime).finally(() => {
@@ -85,10 +83,7 @@ export class PeaksService {
   /** Decode the file to 1024 normalized peak values (0.08–0.96). Throws on failure. */
   private async decode(path: string): Promise<Uint8Array> {
     const abs = join(this.roots.libraries, path);
-    const duration =
-      (this.db.query("SELECT duration FROM files WHERE path = ?").get(path) as
-        | { duration: number | null }
-        | undefined)?.duration ?? null;
+    const duration = getFile(this.db, path)?.duration ?? null;
 
     const proc = Bun.spawn(
       [
@@ -110,8 +105,8 @@ export class PeaksService {
         const chunk = new Float32Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 4));
         for (let i = 0; i < chunk.length; i++) {
           const b = Math.min(PEAK_BUCKETS - 1, Math.floor(idx / samplesPerBucket));
-          const a = Math.abs(chunk[i]);
-          if (a > maxAbs[b]) maxAbs[b] = a;
+          const a = Math.abs(chunk[i]!);
+          if (a > maxAbs[b]!) maxAbs[b] = a;
           idx++;
         }
       }
@@ -123,8 +118,8 @@ export class PeaksService {
       const per = samples.length / PEAK_BUCKETS;
       for (let i = 0; i < samples.length; i++) {
         const b = Math.min(PEAK_BUCKETS - 1, Math.floor(i / per));
-        const a = Math.abs(samples[i]);
-        if (a > maxAbs[b]) maxAbs[b] = a;
+        const a = Math.abs(samples[i]!);
+        if (a > maxAbs[b]!) maxAbs[b] = a;
       }
     }
 
@@ -133,10 +128,10 @@ export class PeaksService {
 
     // Normalize to 0.08–0.96; all-silence → flat 0.08.
     let peak = 0;
-    for (let i = 0; i < PEAK_BUCKETS; i++) if (maxAbs[i] > peak) peak = maxAbs[i];
+    for (let i = 0; i < PEAK_BUCKETS; i++) if (maxAbs[i]! > peak) peak = maxAbs[i]!;
     const out = new Float32Array(PEAK_BUCKETS);
     for (let i = 0; i < PEAK_BUCKETS; i++) {
-      out[i] = peak === 0 ? 0.08 : 0.08 + 0.88 * (maxAbs[i] / peak);
+      out[i] = peak === 0 ? 0.08 : 0.08 + 0.88 * (maxAbs[i]! / peak);
     }
     return new Uint8Array(out.buffer);
   }
