@@ -122,7 +122,7 @@ describe("runDurationPass", () => {
       await writeWav(join(dir, "a.wav"), 1);
       await writeWav(join(dir, "b.wav"), 2);
       applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
-      expect(await runDurationPass(s.db, s.roots)).toBe(2);
+      expect(await runDurationPass(s.db, s.roots)).toEqual({ count: 2, libraries: ["Podcasts"] });
       const rows = s.db
         .query("SELECT path, duration FROM files ORDER BY path")
         .all() as { path: string; duration: number | null }[];
@@ -130,7 +130,7 @@ describe("runDurationPass", () => {
       expect(rows[1]).toEqual({ path: "Podcasts/b.wav", duration: expect.any(Number) });
       expect(rows[0]!.duration!).toBeCloseTo(1, 1);
       expect(rows[1]!.duration!).toBeCloseTo(2, 1);
-      expect(await runDurationPass(s.db, s.roots)).toBe(0);
+      expect(await runDurationPass(s.db, s.roots)).toEqual({ count: 0, libraries: [] });
     } finally {
       await s.cleanup();
     }

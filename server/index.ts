@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative } from "node:path";
 import type { Database } from "bun:sqlite";
 import type { Roots } from "./config";
-import { filesByLibrary, replaceLibraryFiles, type FileRow } from "./db";
+import { filesWithNullDuration, filesByLibrary, replaceLibraryFiles, setFileDuration, type FileRow } from "./db";
 
 export const AUDIO_EXTS: Record<string, true> = {
   ".wav": true, ".mp3": true, ".ogg": true, ".oga": true,
@@ -103,28 +103,34 @@ export async function probeDuration(absPath: string): Promise<number | null> {
   }
 }
 
-/** Probe every file with NULL duration (bounded concurrency). Returns how many got a duration. */
-export async function runDurationPass(db: Database, roots: Roots, concurrency = 4): Promise<number> {
-  const pending = (
-    db.query("SELECT path FROM files WHERE duration IS NULL").all() as { path: string }[]
-  ).map((r) => r.path);
+export interface DurationPassResult {
+  /** Files that got a duration. */
+  count: number;
+  /** Libraries containing at least one updated file. */
+  libraries: string[];
+}
+
+/** Probe every file with NULL duration (bounded concurrency). */
+export async function runDurationPass(db: Database, roots: Roots, concurrency = 4): Promise<DurationPassResult> {
+  const pending = filesWithNullDuration(db);
   let i = 0;
-  let done = 0;
-  const update = db.prepare("UPDATE files SET duration = ? WHERE path = ?");
+  let count = 0;
+  const touched = new Set<string>();
   const worker = async () => {
     while (true) {
-      const path = pending[i++];
-      if (path === undefined) break;
-      const d = await probeDuration(join(roots.libraries, path));
+      const row = pending[i++];
+      if (row === undefined) break;
+      const d = await probeDuration(join(roots.libraries, row.path));
       if (d !== null) {
-        update.run(d, path);
-        done++;
+        setFileDuration(db, row.path, d);
+        touched.add(row.library);
+        count++;
       }
     }
   };
   const n = Math.max(1, Math.min(concurrency, pending.length));
   await Promise.all(Array.from({ length: n }, worker));
-  return done;
+  return { count, libraries: [...touched] };
 }
 
 /** Walk + apply + duration pass for one library. */

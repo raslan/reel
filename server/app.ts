@@ -8,7 +8,6 @@ import type { EventBus } from "./events";
 import type { PeaksService } from "./peaks";
 import { candidateLibraries, type WalkDiff } from "./index";
 import { addFavorite, countFilesByLibrary, favoritePaths, folderFiles, getFile, getEnabledLibraries, isIndexedFile, removeFavorite, searchFiles, setEnabledLibraries } from "./db";
-
 export interface AppCtx {
   db: Database;
   roots: Roots;
@@ -16,6 +15,8 @@ export interface AppCtx {
   peaks: PeaksService;
   /** Walk + duration pass for one library. */
   rescan: (library: string) => Promise<WalkDiff>;
+  /** Called after the enabled-library set changes (e.g. to resync watchers). */
+  onLibrariesChanged?: () => void;
 }
 
 const byNameCI = (a: { name: string }, b: { name: string }) =>
@@ -61,6 +62,7 @@ export function createApp(ctx: AppCtx): Hono {
     const next = [...new Set(body.enabled as string[])].filter((n) => candidates.has(n));
     const prev = getEnabledLibraries(db);
     setEnabledLibraries(db, next);
+    ctx.onLibrariesChanged?.();
     bus.emit("libraries-changed");
     for (const lib of next) {
       if (prev.includes(lib)) continue;

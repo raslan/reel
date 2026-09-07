@@ -99,6 +99,18 @@ export function getFile(db: Database, path: string): { mtime: number; duration: 
   return row ?? null;
 }
 
+/** All indexed files that still have no duration. */
+export function filesWithNullDuration(db: Database): { path: string; library: string }[] {
+  return db
+    .query("SELECT path, library FROM files WHERE duration IS NULL")
+    .all() as { path: string; library: string }[];
+}
+
+/** Set a file's duration in seconds. */
+export function setFileDuration(db: Database, path: string, duration: number): void {
+  db.prepare("UPDATE files SET duration = ? WHERE path = ?").run(duration, path);
+}
+
 /** Case-insensitive filename substring search, unbounded. `q` wildcards are escaped. */
 export function searchFiles(db: Database, q: string, enabled: string[]): FileRow[] {
   if (enabled.length === 0) return [];
