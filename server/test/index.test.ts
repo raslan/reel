@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { rm, utimes } from "node:fs/promises";
+import { mkdir, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
-import { applyWalk, candidateLibraries, walkLibrary } from "../index";
-import { makeStackLite, writeWav } from "./helpers";
+import { applyWalk, candidateLibraries, probeDuration, rescanLibrary, runDurationPass, walkLibrary } from "../index";
+import { makeStackLite, makeTempDir, writeWav } from "./helpers";
 
 describe("walkLibrary", () => {
   test("walks nested folders, filters by extension, sets folder/name", async () => {
@@ -93,6 +93,59 @@ describe("candidateLibraries", () => {
         { name: "Library", path: "" },
         { name: "Podcasts", path: "Podcasts" },
       ]);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("probeDuration", () => {
+  test("returns duration for a valid wav, null for a missing file", async () => {
+    const { dir, cleanup } = await makeTempDir("reel-probe-");
+    try {
+      const p = join(dir, "a.wav");
+      await writeWav(p, 1);
+      expect(await probeDuration(p)).toBeCloseTo(1, 1);
+      expect(await probeDuration(join(dir, "nope.wav"))).toBeNull();
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("runDurationPass", () => {
+  test("fills NULL durations and is a no-op when nothing is pending", async () => {
+    const s = await makeStackLite({});
+    try {
+      const dir = join(s.roots.libraries, "Podcasts");
+      await mkdir(dir, { recursive: true });
+      await writeWav(join(dir, "a.wav"), 1);
+      await writeWav(join(dir, "b.wav"), 2);
+      applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
+      expect(await runDurationPass(s.db, s.roots)).toBe(2);
+      const rows = s.db
+        .query("SELECT path, duration FROM files ORDER BY path")
+        .all() as { path: string; duration: number | null }[];
+      expect(rows[0]).toEqual({ path: "Podcasts/a.wav", duration: expect.any(Number) });
+      expect(rows[1]).toEqual({ path: "Podcasts/b.wav", duration: expect.any(Number) });
+      expect(rows[0]!.duration!).toBeCloseTo(1, 1);
+      expect(rows[1]!.duration!).toBeCloseTo(2, 1);
+      expect(await runDurationPass(s.db, s.roots)).toBe(0);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("rescanLibrary", () => {
+  test("walks, applies, and probes durations in one call", async () => {
+    const s = await makeStackLite({});
+    try {
+      await writeWav(join(s.roots.libraries, "Podcasts/a.wav"), 1);
+      const diff = await rescanLibrary(s.db, s.roots, "Podcasts");
+      expect(diff.added).toBe(1);
+      const r = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as { duration: number };
+      expect(r.duration).toBeCloseTo(1, 1);
     } finally {
       await s.cleanup();
     }

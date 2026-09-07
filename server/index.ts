@@ -87,3 +87,57 @@ export async function candidateLibraries(roots: Roots): Promise<{ name: string; 
   for (const e of entries) if (e.isDirectory()) out.push({ name: e.name, path: e.name });
   return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
+
+/** Probe one file with ffprobe. Returns seconds, or null on any failure. */
+export async function probeDuration(absPath: string): Promise<number | null> {
+  try {
+    const proc = Bun.spawn(
+      [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        absPath,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const out = await new Response(proc.stdout).text();
+    const code = await proc.exited;
+    if (code !== 0) return null;
+    const d = Number.parseFloat(out.trim());
+    return Number.isFinite(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Probe every file with NULL duration (bounded concurrency). Returns how many got a duration. */
+export async function runDurationPass(db: Database, roots: Roots, concurrency = 4): Promise<number> {
+  const pending = (
+    db.query("SELECT path FROM files WHERE duration IS NULL").all() as { path: string }[]
+  ).map((r) => r.path);
+  let i = 0;
+  let done = 0;
+  const update = db.prepare("UPDATE files SET duration = ? WHERE path = ?");
+  const worker = async () => {
+    while (true) {
+      const path = pending[i++];
+      if (path === undefined) break;
+      const d = await probeDuration(join(roots.libraries, path));
+      if (d !== null) {
+        update.run(d, path);
+        done++;
+      }
+    }
+  };
+  const n = Math.max(1, Math.min(concurrency, pending.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return done;
+}
+
+/** Walk + apply + duration pass for one library. */
+export async function rescanLibrary(db: Database, roots: Roots, library: string): Promise<WalkDiff> {
+  const walked = await walkLibrary(roots, library);
+  const diff = applyWalk(db, library, walked);
+  await runDurationPass(db, roots);
+  return diff;
+}
