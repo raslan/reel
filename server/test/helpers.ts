@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { openDb, setEnabledLibraries } from "../db";
 import type { Roots } from "../config";
+import { createBus, type EventBus } from "../events";
 
 /** Temp dir with cleanup. */
 export async function makeTempDir(prefix: string): Promise<{ dir: string; cleanup: () => Promise<void> }> {
@@ -57,6 +58,7 @@ export async function makeStackLite(opts?: {
 }): Promise<{
   db: Database;
   roots: Roots;
+  bus: EventBus;
   cleanup: () => Promise<void>;
 }> {
   const { dir: lib, cleanup: libCleanup } = await makeTempDir("reel-lib-");
@@ -64,10 +66,12 @@ export async function makeStackLite(opts?: {
   if (opts?.files) await makeTempTree(lib, opts.files);
   const db = openDb(join(data, "reel.db"));
   const roots: Roots = { libraries: lib, data };
+  const bus = createBus();
   if (opts?.enabled) setEnabledLibraries(db, opts.enabled);
   return {
     db,
     roots,
+    bus,
     cleanup: async () => {
       db.close();
       await libCleanup();
