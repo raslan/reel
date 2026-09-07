@@ -1,0 +1,16 @@
+{
+  "name": "reel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run server/server.ts",
+    "test": "bun test server/test"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.5.0"
+  }
+}
