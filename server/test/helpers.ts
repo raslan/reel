@@ -5,6 +5,7 @@ import type { Database } from "bun:sqlite";
 import { openDb, setEnabledLibraries } from "../db";
 import type { Roots } from "../config";
 import { createBus, type EventBus } from "../events";
+import { PeaksService } from "../peaks";
 
 /** Temp dir with cleanup. */
 export async function makeTempDir(prefix: string): Promise<{ dir: string; cleanup: () => Promise<void> }> {
@@ -52,26 +53,33 @@ export async function writeWav(path: string, seconds: number, sampleRate = 8000,
  * Task 8 adds the `makeStack` HTTP factory. Each addition lands in the
  * task that creates the module it imports, so the import graph always resolves.
  */
-export async function makeStackLite(opts?: {
-  files?: Record<string, string>;
-  enabled?: string[];
-}): Promise<{
+export interface StackLite {
   db: Database;
   roots: Roots;
   bus: EventBus;
+  peaks: PeaksService;
+  stopPeaks: () => Promise<void>;
   cleanup: () => Promise<void>;
-}> {
+}
+
+export async function makeStackLite(opts?: {
+  files?: Record<string, string>;
+  enabled?: string[];
+}): Promise<StackLite> {
   const { dir: lib, cleanup: libCleanup } = await makeTempDir("reel-lib-");
   const { dir: data, cleanup: dataCleanup } = await makeTempDir("reel-data-");
   if (opts?.files) await makeTempTree(lib, opts.files);
   const db = openDb(join(data, "reel.db"));
   const roots: Roots = { libraries: lib, data };
   const bus = createBus();
+  const peaks = new PeaksService(db, roots, bus);
   if (opts?.enabled) setEnabledLibraries(db, opts.enabled);
   return {
     db,
     roots,
     bus,
+    peaks,
+    stopPeaks: () => peaks.stop(),
     cleanup: async () => {
       db.close();
       await libCleanup();
