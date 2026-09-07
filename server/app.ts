@@ -6,7 +6,7 @@ import type { Roots } from "./config";
 import type { EventBus } from "./events";
 import type { PeaksService } from "./peaks";
 import { candidateLibraries, type WalkDiff } from "./index";
-import { countFilesByLibrary, folderFiles, getEnabledLibraries, setEnabledLibraries } from "./db";
+import { addFavorite, countFilesByLibrary, favoritePaths, folderFiles, getEnabledLibraries, isIndexedFile, removeFavorite, searchFiles, setEnabledLibraries } from "./db";
 
 export interface AppCtx {
   db: Database;
@@ -108,5 +108,37 @@ export function createApp(ctx: AppCtx): Hono {
     }
   }
 
+  /* ---------- search ---------- */
+
+  app.get("/api/search", (c) => {
+    const q = (c.req.query("q") ?? "").trim();
+    const files = searchFiles(db, q, getEnabledLibraries(db)).map((r) => ({
+      name: r.name,
+      path: r.path,
+      duration: r.duration,
+    }));
+    return c.json({ files, total: files.length });
+  });
+
+  /* ---------- favorites ---------- */
+
+  app.get("/api/favorites", (c) =>
+    c.json({ paths: favoritePaths(db, getEnabledLibraries(db)) }),
+  );
+
+  app.post("/api/favorites", async (c) => {
+    const body = await c.req.json<{ path?: string }>().catch(() => null);
+    const path = body?.path ?? "";
+    if (!path || !isIndexedFile(db, path)) {
+      return c.json({ error: "not an indexed file" }, 404);
+    }
+    addFavorite(db, path);
+    return c.json({ ok: true });
+  });
+
+  app.delete("/api/favorites", (c) => {
+    removeFavorite(db, c.req.query("path") ?? "");
+    return c.json({ ok: true });
+  });
   return app;
 }

@@ -115,6 +115,14 @@ export interface FileEntry {
   size: number;
 }
 
+export interface SearchBody {
+  files: { name: string; path: string; duration: number | null }[];
+  total: number;
+}
+
+export interface FavoritesBody {
+  paths: string[];
+}
 export interface ListBody {
   folders: { name: string; path: string }[];
   files: FileEntry[];
