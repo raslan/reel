@@ -14,5 +14,8 @@ dist/
 # Local dev data (dev runs outside docker)
 data/
 
+# Sample audio library for smoke tests (user-provided, local only)
+sample-library/
+
 # OS
 .DS_Store
