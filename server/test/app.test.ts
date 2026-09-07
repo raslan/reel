@@ -193,3 +193,46 @@ describe("favorites", () => {
     }
   });
 });
+
+describe("GET /api/peaks", () => {
+  test("202 pending on first request, then 200 with 1024 float32 buckets", async () => {
+    const s = await makeStack({});
+    try {
+      await writeWav(join(s.roots.libraries, "Podcasts/tone.wav"), 1);
+      await s.rescan("Podcasts");
+
+      const ready = waitForEvent(s, "Podcasts/tone.wav", "peaks-ready");
+      const first = await fetch(`${s.base}/api/peaks?path=Podcasts/tone.wav`);
+      expect(first.status).toBe(202);
+      expect(await first.json()).toEqual({ status: "pending" });
+
+      await ready;
+      const res = await fetch(`${s.base}/api/peaks?path=Podcasts/tone.wav`);
+      expect(res.status).toBe(200);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      expect(buf.length).toBe(1024 * 4);
+    } finally {
+      await s.stopPeaks();
+      await s.cleanup();
+    }
+  });
+
+  test("failed decode → 200 json error; unknown path → 404", async () => {
+    const s = await makeStack({});
+    try {
+      await Bun.write(join(s.roots.libraries, "Podcasts/bad.wav"), "not audio");
+      await s.rescan("Podcasts");
+
+      const failed = waitForEvent(s, "Podcasts/bad.wav", "peaks-failed");
+      await fetch(`${s.base}/api/peaks?path=Podcasts/bad.wav`);
+      await failed;
+      const res = await fetch(`${s.base}/api/peaks?path=Podcasts/bad.wav`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ error: "decode failed" });
+      expect((await fetch(`${s.base}/api/peaks?path=Podcasts/ghost.wav`)).status).toBe(404);
+    } finally {
+      await s.stopPeaks();
+      await s.cleanup();
+    }
+  });
+});

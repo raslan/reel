@@ -6,7 +6,7 @@ import type { Roots } from "./config";
 import type { EventBus } from "./events";
 import type { PeaksService } from "./peaks";
 import { candidateLibraries, type WalkDiff } from "./index";
-import { addFavorite, countFilesByLibrary, favoritePaths, folderFiles, getEnabledLibraries, isIndexedFile, removeFavorite, searchFiles, setEnabledLibraries } from "./db";
+import { addFavorite, countFilesByLibrary, favoritePaths, folderFiles, getFile, getEnabledLibraries, isIndexedFile, removeFavorite, searchFiles, setEnabledLibraries } from "./db";
 
 export interface AppCtx {
   db: Database;
@@ -21,7 +21,7 @@ const byNameCI = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
 export function createApp(ctx: AppCtx): Hono {
-  const { db, roots, bus } = ctx;
+  const { db, roots, bus, peaks } = ctx;
   const app = new Hono();
 
   app.onError((err, c) => {
@@ -139,6 +139,25 @@ export function createApp(ctx: AppCtx): Hono {
   app.delete("/api/favorites", (c) => {
     removeFavorite(db, c.req.query("path") ?? "");
     return c.json({ ok: true });
+  });
+
+  /* ---------- peaks ---------- */
+
+  app.get("/api/peaks", (c) => {
+    const path = c.req.query("path") ?? "";
+    const file = getFile(db, path);
+    if (!file) return c.json({ error: "not an indexed file" }, 404);
+    const state = peaks.getState(path, file.mtime);
+    if (state === "ready") {
+      // state === "ready" implies getCached() returns a row for this path
+      const cached = peaks.getCached(path)!;
+      return c.body(new Uint8Array(cached.data), 200, {
+        "content-type": "application/octet-stream",
+      });
+    }
+    if (state === "failed") return c.json({ error: "decode failed" }, 200);
+    peaks.ensure(path, file.mtime);
+    return c.json({ status: "pending" }, 202);
   });
   return app;
 }
