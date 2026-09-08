@@ -10,6 +10,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["bun"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["web/src/*"] },
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,

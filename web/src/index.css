@@ -1,4 +1,326 @@
-/* placeholder — replaced in Task 3 */
-body {
-  background: #0a0e14;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/bricolage-grotesque/index.css";
+@import "@fontsource-variable/instrument-sans/index.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
+
+@theme {
+  /* Reel palette — the single source of truth for color */
+  --color-bg: #0a0e14;
+  --color-panel: #10141c;
+  --color-line: #1e2530;
+  --color-fg: #f5f7fa;
+  --color-dim: #8a93a6;
+  --color-gold: #e6b450;
+  --color-orange: #ff8f40;
+  --color-green: #aad94c;
+  --color-red: #f07178;
+  --color-gray: #4d5566;
+
+  --font-display: "Bricolage Grotesque Variable", sans-serif;
+  --font-sans: "Instrument Sans Variable", sans-serif;
+  --font-mono: "Space Mono", monospace;
+
+  /* shadcn semantic tokens mapped onto the Reel palette */
+  --background: var(--color-bg);
+  --foreground: var(--color-fg);
+  --card: var(--color-panel);
+  --card-foreground: var(--color-fg);
+  --popover: var(--color-panel);
+  --popover-foreground: var(--color-fg);
+  --primary: var(--color-gold);
+  --primary-foreground: var(--color-bg);
+  --secondary: var(--color-line);
+  --secondary-foreground: var(--color-fg);
+  --muted: var(--color-line);
+  --muted-foreground: var(--color-dim);
+  --accent: var(--color-line);
+  --accent-foreground: var(--color-fg);
+  --destructive: var(--color-red);
+  --border: var(--color-line);
+  --input: var(--color-line);
+  --ring: var(--color-gold);
+  --radius: 0.625rem;
+
+  --color-chart-1: var(--color-gold);
+  --color-chart-2: var(--color-orange);
+  --color-chart-3: var(--color-green);
+  --color-chart-4: var(--color-red);
+  --color-chart-5: var(--color-dim);
+
+  --color-sidebar: var(--color-panel);
+  --color-sidebar-foreground: var(--color-fg);
+  --color-sidebar-border: var(--color-line);
+  --color-sidebar-accent: var(--color-line);
+  --color-sidebar-accent-foreground: var(--color-fg);
+  --color-sidebar-ring: var(--color-gold);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 30%, transparent);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 5px;
+    border: 2px solid var(--color-bg);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ---------- deck materials (port of docs/reel.html) ---------- */
+
+/* film grain over everything, no glow */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.brushed {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.014) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* screen + zen transitions */
+.screen-enter {
+  animation: screenIn 0.28s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+}
+@keyframes screenIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.zen-enter {
+  animation: zenIn 0.3s cubic-bezier(0.22, 0.8, 0.36, 1) both;
+}
+@keyframes zenIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* waveform — two stacked bar layers (base + gold fill) and a playhead */
+.wave {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  touch-action: none;
+}
+.wave .layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.wave .layer i {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 6px;
+  border-radius: 1px;
+}
+.wave .base i {
+  background: var(--color-gray);
+  opacity: 0.5;
+}
+.wave .fill {
+  clip-path: inset(0 100% 0 0);
+}
+.wave .head {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  border-radius: 1px;
+  left: 0;
+}
+.wave:hover .head {
+  background: var(--color-orange);
+  width: 3px;
+}
+.wave-static {
+  pointer-events: none;
+}
+
+/* equalizer (playing row) */
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.eq i {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-gold);
+  transform-origin: bottom;
+  animation: eqb 1s ease-in-out infinite;
+}
+.eq i:nth-child(1) {
+  height: 100%;
+}
+.eq i:nth-child(2) {
+  height: 100%;
+  animation-delay: 0.25s;
+}
+.eq i:nth-child(3) {
+  height: 100%;
+  animation-delay: 0.5s;
+}
+.eq i:nth-child(4) {
+  height: 100%;
+  animation-delay: 0.12s;
+}
+@keyframes eqb {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* VU meter */
+.vu {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.vu i {
+  width: 3px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--color-line);
+}
+.vu i.lit-1,
+.vu i.lit-2,
+.vu i.lit-3,
+.vu i.lit-4,
+.vu i.lit-5 {
+  background: var(--color-green);
+}
+.vu i.lit-6,
+.vu i.lit-7 {
+  background: var(--color-gold);
+}
+.vu i.lit-8,
+.vu i.lit-9 {
+  background: var(--color-orange);
+}
+.vu i.lit-10 {
+  background: var(--color-red);
+}
+.vu i.flicker {
+  animation: flick 0.9s steps(2) infinite;
+}
+@keyframes flick {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* buttons */
+.play-btn {
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease;
+}
+.play-btn:active {
+  transform: scale(0.94);
+}
+.ghost-btn {
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.ghost-btn:hover:not(:disabled) {
+  background: var(--color-line);
+  color: var(--color-fg);
+}
+.ghost-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* star fill (filled star = favorite) */
+.star-on svg {
+  fill: var(--color-gold);
+}
+
+/* shadcn Slider: gold track fill on line-color rail */
+[data-slot="slider"] {
+  background: var(--color-line);
+}
+[data-slot="slider-range"] {
+  background: var(--color-gold);
+}
+[data-slot="slider-thumb"] {
+  background: var(--color-gold);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-line);
+}
+
+/* ---------- motion safety ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component animation */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component animation */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component animation */
+    transition-duration: 0.01ms !important;
+  }
 }

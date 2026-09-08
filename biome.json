@@ -5,6 +5,9 @@
     "ignoreUnknown": true,
     "includes": ["web/**", "vite.config.ts", "vitest.config.ts"]
   },
+  "css": {
+    "parser": { "tailwindDirectives": true }
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -15,6 +18,7 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "style": { "noDescendingSpecificity": "off" },
       "suspicious": { "noConsole": "error" },
       "a11y": { "useKeyWithClickEvents": "error" }
     }
