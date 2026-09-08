@@ -19,7 +19,7 @@ export function SearchScreen() {
   const { toggle } = useFavoriteToggle();
   const favorites = useFavorites();
   const favSet = new Set(favorites.data?.paths ?? []);
-  const search = useSearch(state.searchQuery, "");
+  const search = useSearch(state.searchQuery);
   const files = sortFiles(search.data?.files ?? [], state.sort);
 
   return (
@@ -37,7 +37,9 @@ export function SearchScreen() {
         <div className="flex items-center gap-3 mt-4 mb-2">
           <SortControl sort={state.sort} onChange={(s) => dispatch({ type: "setSort", sort: s })} />
           <span className="font-mono text-[11px] text-dim/50">
-            {search.data ? `${search.data.total} matches` : ""}
+            {search.data
+              ? `${search.data.total} ${state.searchQuery.trim() === "" ? "files" : "matches"}`
+              : ""}
           </span>
         </div>
       </div>

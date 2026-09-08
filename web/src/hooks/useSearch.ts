@@ -9,6 +9,8 @@ export function useSearch(q: string, folder?: string) {
   return useQuery({
     queryKey: searchKey(dq, folder ?? null),
     queryFn: () => searchFiles(dq, folder),
-    enabled: dq.trim() !== "",
+    // Global search (no folder) lists all files on an empty query, like the mockup;
+    // in-folder search is only used while a query is typed.
+    enabled: folder === undefined ? true : dq.trim() !== "",
   });
 }
