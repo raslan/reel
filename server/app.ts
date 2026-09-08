@@ -115,10 +115,12 @@ export function createApp(ctx: AppCtx): Hono {
 
   app.get("/api/search", (c) => {
     const q = (c.req.query("q") ?? "").trim();
-    const files = searchFiles(db, q, getEnabledLibraries(db)).map((r) => ({
+    const folder = (c.req.query("folder") ?? "").trim();
+    const files = searchFiles(db, q, getEnabledLibraries(db), folder || undefined).map((r) => ({
       name: r.name,
       path: r.path,
       duration: r.duration,
+      size: r.size,
     }));
     return c.json({ files, total: files.length });
   });

@@ -122,8 +122,12 @@ export function setFileDuration(db: Database, path: string, duration: number): v
   db.prepare("UPDATE files SET duration = ? WHERE path = ?").run(duration, path);
 }
 
-/** Case-insensitive filename substring search, unbounded. `q` wildcards are escaped. */
-export function searchFiles(db: Database, q: string, enabled: string[]): FileRow[] {
+/**
+ * Case-insensitive filename substring search, unbounded. `q` wildcards are
+ * escaped. Optional `folder` restricts matches to that folder and its
+ * subtrees (folder paths are relative to the library root).
+ */
+export function searchFiles(db: Database, q: string, enabled: string[], folder?: string): FileRow[] {
   if (enabled.length === 0) return [];
   const inClause = enabled.map(() => "?").join(", ");
   const params: (string | number)[] = [...enabled];
@@ -131,6 +135,11 @@ export function searchFiles(db: Database, q: string, enabled: string[]): FileRow
   if (q) {
     sql += ` AND name LIKE ? ESCAPE '\\'`;
     params.push(`%${q.replace(/[\\%_]/g, (m) => "\\" + m)}%`);
+  }
+  if (folder) {
+    const esc = folder.replace(/[\\%_]/g, (m) => "\\" + m);
+    sql += " AND (folder = ? OR folder LIKE ? ESCAPE '\\')";
+    params.push(folder, `${esc}/%`);
   }
   sql += " ORDER BY name COLLATE NOCASE";
   return db.query(sql).all(...params) as FileRow[];
