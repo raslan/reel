@@ -8,7 +8,7 @@ import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { Switch } from "./ui/switch";
 
-export function Onboarding() {
+export function Onboarding({ onDone }: { onDone: () => void }) {
   const dispatch = useAppDispatch();
   const libraries = useLibraries();
   const libs = libraries.data?.libraries ?? [];
@@ -29,6 +29,7 @@ export function Onboarding() {
     try {
       await setLibraries([...enabled]);
       setOnboarded();
+      onDone();
       dispatch({ type: "setScreen", screen: "library" });
     } finally {
       setBusy(false);
