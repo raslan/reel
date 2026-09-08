@@ -2,4 +2,7 @@
 docs
 libraries
 data
+sample-library
+node_modules
+public
 *.md

@@ -1,12 +1,15 @@
 # syntax=docker/dockerfile:1
 
-# --- build: install node_modules ---
+# --- build: install deps + build the frontend ---
 FROM oven/bun:1.3.14 AS build
 WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
+COPY tsconfig.json vite.config.ts ./
 COPY server ./server
-COPY public ./public
+COPY web ./web
+RUN bun run build   # tsc --noEmit -p web && vite build --outDir public
+RUN bun install --frozen-lockfile --production   # prune to runtime deps
 
 # --- runtime ---
 FROM oven/bun:1.3.14-alpine
