@@ -47,6 +47,8 @@ export function Waveform({ bars, peaks, className, seekable = true }: WaveformPr
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!seekable) return;
+    // Keep seek gestures from triggering click handlers on enclosing chips.
+    e.stopPropagation();
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     const apply = (clientX: number) => {
