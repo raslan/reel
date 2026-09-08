@@ -1,24 +1,26 @@
+import type { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Database } from "bun:sqlite";
-import { openDb, setEnabledLibraries } from "../db";
-import type { Roots } from "../config";
-import { createBus, type EventBus } from "../events";
-import { PeaksService } from "../peaks";
-import type { Hono } from "hono";
 import type { Server } from "bun";
+import type { Hono } from "hono";
 import { createApp } from "../app";
+import type { Roots } from "../config";
+import { openDb, setEnabledLibraries } from "../db";
+import { createBus, type EventBus } from "../events";
 import { rescanLibrary, type WalkDiff } from "../index";
+import { PeaksService } from "../peaks";
 
 /** Temp dir with cleanup. */
-export async function makeTempDir(prefix: string): Promise<{ dir: string; cleanup: () => Promise<void> }> {
+export async function makeTempDir(
+  prefix: string,
+): Promise<{ dir: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(join(tmpdir(), prefix));
   return { dir, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
 /** Create a file tree under `base` from a map of relative path → text content. */
-export async function makeTempTree(base: string, files: Record<string, string>): Promise<void> {
+async function makeTempTree(base: string, files: Record<string, string>): Promise<void> {
   for (const [rel, content] of Object.entries(files)) {
     const p = join(base, rel);
     await mkdir(dirname(p), { recursive: true });
@@ -27,7 +29,12 @@ export async function makeTempTree(base: string, files: Record<string, string>):
 }
 
 /** Write a valid PCM16 mono WAV (sine tone) — ffprobe/ffmpeg can decode it. */
-export async function writeWav(path: string, seconds: number, sampleRate = 8000, freq = 440): Promise<void> {
+export async function writeWav(
+  path: string,
+  seconds: number,
+  sampleRate = 8000,
+  freq = 440,
+): Promise<void> {
   const n = Math.floor(seconds * sampleRate);
   const data = Buffer.alloc(n * 2);
   for (let i = 0; i < n; i++) {
@@ -101,14 +108,14 @@ export interface Stack extends StackLite {
 
 /* ---------- API response shapes (mirror the JSON contracts) ---------- */
 
-export interface LibraryInfo {
+interface LibraryInfo {
   name: string;
   path: string;
   audioFiles: number;
   enabled: boolean;
 }
 
-export interface FileEntry {
+interface FileEntry {
   name: string;
   path: string;
   duration: number | null;

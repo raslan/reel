@@ -4,7 +4,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { rescanLibrary } from "../index";
 import { startWatchers } from "../watch";
-import { makeStackLite, waitForEvent, writeWav, type StackLite } from "./helpers";
+import { makeStackLite, type StackLite, waitForEvent, writeWav } from "./helpers";
 
 // inotify is required; skip cleanly where it is unavailable.
 const canWatch = (() => {
@@ -49,7 +49,9 @@ describe("watch", () => {
     const w = startWatchers(watchCtx(s));
     try {
       await rescanLibrary(s.db, s.roots, "Podcasts");
-      s.db.prepare("INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)").run("Podcasts/a.wav", 1);
+      s.db
+        .prepare("INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)")
+        .run("Podcasts/a.wav", 1);
 
       const changed = waitForEvent(s, "Podcasts", "library-changed");
       await rm(join(s.roots.libraries, "Podcasts/a.wav"));

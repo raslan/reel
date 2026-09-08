@@ -12,9 +12,33 @@ beforeAll(async () => {
   db = openDb(join(dir, "test.db"));
   // Paths are relative to the libraries root, so they start with the library name.
   replaceLibraryFiles(db, "pod", [
-    { path: "pod/podcasts/tech/a.mp3", library: "pod", folder: "pod/podcasts/tech", name: "a.mp3", size: 1000, mtime: 1, duration: 12 },
-    { path: "pod/podcasts/tech/b.mp3", library: "pod", folder: "pod/podcasts/tech", name: "b.mp3", size: 1000, mtime: 1, duration: 13 },
-    { path: "pod/podcasts/c.mp3", library: "pod", folder: "pod/podcasts", name: "c.mp3", size: 1000, mtime: 1, duration: 14 },
+    {
+      path: "pod/podcasts/tech/a.mp3",
+      library: "pod",
+      folder: "pod/podcasts/tech",
+      name: "a.mp3",
+      size: 1000,
+      mtime: 1,
+      duration: 12,
+    },
+    {
+      path: "pod/podcasts/tech/b.mp3",
+      library: "pod",
+      folder: "pod/podcasts/tech",
+      name: "b.mp3",
+      size: 1000,
+      mtime: 1,
+      duration: 13,
+    },
+    {
+      path: "pod/podcasts/c.mp3",
+      library: "pod",
+      folder: "pod/podcasts",
+      name: "c.mp3",
+      size: 1000,
+      mtime: 1,
+      duration: 14,
+    },
   ]);
 });
 
@@ -25,7 +49,11 @@ afterAll(async () => {
 
 describe("searchFiles", () => {
   it("returns all matches with no scope", () => {
-    expect(searchFiles(db, "mp3", ["pod"], undefined).map((r) => r.name)).toEqual(["a.mp3", "b.mp3", "c.mp3"]);
+    expect(searchFiles(db, "mp3", ["pod"], undefined).map((r) => r.name)).toEqual([
+      "a.mp3",
+      "b.mp3",
+      "c.mp3",
+    ]);
   });
 
   it("restricts matches to the scoped folder tree", () => {

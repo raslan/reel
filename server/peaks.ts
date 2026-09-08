@@ -1,10 +1,10 @@
-import { join } from "node:path";
 import type { Database } from "bun:sqlite";
+import { join } from "node:path";
 import type { Roots } from "./config";
-import type { EventBus } from "./events";
 import { getFile, getPeaks, setPeaks } from "./db";
+import type { EventBus } from "./events";
 
-export const PEAK_BUCKETS = 1024;
+const PEAK_BUCKETS = 1024;
 
 export type PeaksState = "ready" | "pending" | "failed";
 
@@ -87,8 +87,21 @@ export class PeaksService {
 
     const proc = Bun.spawn(
       [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-        "-i", abs, "-vn", "-ac", "1", "-ar", "1000", "-f", "f32le", "-",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-i",
+        abs,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "1000",
+        "-f",
+        "f32le",
+        "-",
       ],
       { stdout: "pipe", stderr: "pipe" },
     );
@@ -102,7 +115,11 @@ export class PeaksService {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = new Float32Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 4));
+        const chunk = new Float32Array(
+          value.buffer,
+          value.byteOffset,
+          Math.floor(value.byteLength / 4),
+        );
         for (let i = 0; i < chunk.length; i++) {
           const b = Math.min(PEAK_BUCKETS - 1, Math.floor(idx / samplesPerBucket));
           const a = Math.abs(chunk[i]!);

@@ -1,4 +1,4 @@
-export type EventWriter = (event: string, data?: unknown) => void;
+type EventWriter = (event: string, data?: unknown) => void;
 
 export interface EventBus {
   /** Subscribe a writer. Returns an unsubscribe function. */

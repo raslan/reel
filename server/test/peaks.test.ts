@@ -10,7 +10,9 @@ describe("PeaksService", () => {
       await writeWav(join(s.roots.libraries, "Podcasts/tone.wav"), 2);
       applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       const mtime = (
-        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/tone.wav'").get() as { mtime: number }
+        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/tone.wav'").get() as {
+          mtime: number;
+        }
       ).mtime;
       const done = waitForEvent(s, "Podcasts/tone.wav", "peaks-ready");
       s.peaks.ensure("Podcasts/tone.wav", mtime);
@@ -20,7 +22,11 @@ describe("PeaksService", () => {
       const cached = s.peaks.getCached("Podcasts/tone.wav");
       expect(cached).not.toBeNull();
       expect(cached!.mtime).toBe(mtime);
-      const floats = new Float32Array(cached!.data.buffer, cached!.data.byteOffset, cached!.data.byteLength / 4);
+      const floats = new Float32Array(
+        cached!.data.buffer,
+        cached!.data.byteOffset,
+        cached!.data.byteLength / 4,
+      );
       expect(floats.length).toBe(1024);
       for (const v of floats) {
         expect(v).toBeGreaterThanOrEqual(0.08);
@@ -40,7 +46,9 @@ describe("PeaksService", () => {
       await Bun.write(p, "this is not audio");
       applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       const mtime = (
-        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/bad.wav'").get() as { mtime: number }
+        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/bad.wav'").get() as {
+          mtime: number;
+        }
       ).mtime;
       const done = waitForEvent(s, "Podcasts/bad.wav", "peaks-failed");
       s.peaks.ensure("Podcasts/bad.wav", mtime);
@@ -61,13 +69,19 @@ describe("PeaksService", () => {
       await writeWav(join(s.roots.libraries, "Podcasts/silence.wav"), 1, 8000, 0); // freq 0 → zeros
       applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       const mtime = (
-        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/silence.wav'").get() as { mtime: number }
+        s.db.query("SELECT mtime FROM files WHERE path = 'Podcasts/silence.wav'").get() as {
+          mtime: number;
+        }
       ).mtime;
       const done = waitForEvent(s, "Podcasts/silence.wav", "peaks-ready");
       s.peaks.ensure("Podcasts/silence.wav", mtime);
       await done;
       const cached = s.peaks.getCached("Podcasts/silence.wav")!;
-      const floats = new Float32Array(cached.data.buffer, cached.data.byteOffset, cached.data.byteLength / 4);
+      const floats = new Float32Array(
+        cached.data.buffer,
+        cached.data.byteOffset,
+        cached.data.byteLength / 4,
+      );
       for (const v of floats) expect(v).toBeCloseTo(0.08, 5);
     } finally {
       await s.stopPeaks();

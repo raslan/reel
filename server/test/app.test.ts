@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { json, makeStack, waitForEvent, writeWav, type FavoritesBody, type LibrariesBody, type ListBody, type SearchBody } from "./helpers";
+import {
+  type FavoritesBody,
+  json,
+  type LibrariesBody,
+  type ListBody,
+  makeStack,
+  type SearchBody,
+  waitForEvent,
+  writeWav,
+} from "./helpers";
 
 /** Subscribe to the SSE stream. `connected` resolves on the first frame (server signals it); `until` when a frame matches. */
 async function readSSE(
@@ -208,10 +217,14 @@ describe("favorites", () => {
         body: JSON.stringify({ path: "Podcasts/a.mp3" }),
       });
       expect(add.status).toBe(200);
-      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({ paths: ["Podcasts/a.mp3"] });
+      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({
+        paths: ["Podcasts/a.mp3"],
+      });
       const del = await fetch(`${s.base}/api/favorites?path=Podcasts/a.mp3`, { method: "DELETE" });
       expect(del.status).toBe(200);
-      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({ paths: [] });
+      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({
+        paths: [],
+      });
       const bad = await fetch(`${s.base}/api/favorites`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -236,7 +249,9 @@ describe("favorites", () => {
         });
         expect(res.status).toBe(200);
       }
-      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({ paths: ["Podcasts/a.mp3"] });
+      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({
+        paths: ["Podcasts/a.mp3"],
+      });
     } finally {
       await s.cleanup();
     }
@@ -310,8 +325,10 @@ describe("SSE /api/events", () => {
     const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
     try {
       await s.rescan("Podcasts");
-      const sse = await readSSE(s.base, (event, data) =>
-        event === "library-changed" && (JSON.parse(data) as { path: string }).path === "Podcasts",
+      const sse = await readSSE(
+        s.base,
+        (event, data) =>
+          event === "library-changed" && (JSON.parse(data) as { path: string }).path === "Podcasts",
       );
       await sse.connected;
       await Bun.write(join(s.roots.libraries, "Podcasts/b.wav"), "x");
@@ -327,8 +344,11 @@ describe("SSE /api/events", () => {
     try {
       await writeWav(join(s.roots.libraries, "Podcasts/tone.wav"), 1);
       await s.rescan("Podcasts");
-      const sse = await readSSE(s.base, (event, data) =>
-        event === "peaks-ready" && (JSON.parse(data) as { path: string }).path === "Podcasts/tone.wav",
+      const sse = await readSSE(
+        s.base,
+        (event, data) =>
+          event === "peaks-ready" &&
+          (JSON.parse(data) as { path: string }).path === "Podcasts/tone.wav",
       );
       await sse.connected;
       await fetch(`${s.base}/api/peaks?path=Podcasts/tone.wav`);

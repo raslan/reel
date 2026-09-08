@@ -1,5 +1,5 @@
-import { access, mkdir } from "node:fs/promises";
 import { constants } from "node:fs";
+import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export interface Roots {
@@ -16,9 +16,7 @@ export interface Roots {
  * - else /data if present and writable, else ./data (created).
  * Throws if no writable data root can be established.
  */
-export async function resolveRoots(
-  opts?: { libraries?: string; data?: string },
-): Promise<Roots> {
+export async function resolveRoots(opts?: { libraries?: string; data?: string }): Promise<Roots> {
   if (opts?.libraries && opts?.data) {
     await mkdir(opts.data, { recursive: true });
     return { libraries: opts.libraries, data: opts.data };

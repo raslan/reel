@@ -1,12 +1,25 @@
+import type { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Database } from "bun:sqlite";
 import {
-  addFavorite, deleteLibraryFiles, deleteStalePeaks, favoritePaths, filesByLibrary,
-  folderFiles, getEnabledLibraries, getPeaks, openDb, removeFavorite,
-  replaceLibraryFiles, searchFiles, setEnabledLibraries, setPeaks, upsertFiles, type FileRow,
+  addFavorite,
+  deleteLibraryFiles,
+  deleteStalePeaks,
+  type FileRow,
+  favoritePaths,
+  filesByLibrary,
+  folderFiles,
+  getEnabledLibraries,
+  getPeaks,
+  openDb,
+  removeFavorite,
+  replaceLibraryFiles,
+  searchFiles,
+  setEnabledLibraries,
+  setPeaks,
+  upsertFiles,
 } from "../db";
 
 async function tempDb(): Promise<{ db: Database; cleanup: () => Promise<void> }> {
@@ -74,7 +87,9 @@ describe("files", () => {
         row({ path: "Podcasts/100 sure.mp3", name: "100 sure.mp3" }),
       ]);
       expect(searchFiles(db, "ep-12", ["Podcasts"]).map((r) => r.name)).toEqual(["Ep-12.mp3"]);
-      expect(searchFiles(db, "100% sure", ["Podcasts"]).map((r) => r.name)).toEqual(["100% sure.mp3"]);
+      expect(searchFiles(db, "100% sure", ["Podcasts"]).map((r) => r.name)).toEqual([
+        "100% sure.mp3",
+      ]);
       expect(searchFiles(db, "100%", ["Podcasts"]).map((r) => r.name)).toEqual(["100% sure.mp3"]); // % escaped: literal, not wildcard
       expect(searchFiles(db, "ep", [])).toEqual([]);
     } finally {
@@ -85,7 +100,10 @@ describe("files", () => {
   test("deleteLibraryFiles removes only that library's files", async () => {
     const { db, cleanup } = await tempDb();
     try {
-      upsertFiles(db, [row(), row({ path: "Other/x.mp3", library: "Other", folder: "Other", name: "x.mp3" })]);
+      upsertFiles(db, [
+        row(),
+        row({ path: "Other/x.mp3", library: "Other", folder: "Other", name: "x.mp3" }),
+      ]);
       deleteLibraryFiles(db, "Podcasts");
       expect(filesByLibrary(db, "Podcasts")).toEqual([]);
       expect(filesByLibrary(db, "Other").length).toBe(1);
@@ -140,7 +158,10 @@ describe("favorites", () => {
   test("favoritePaths filters to enabled libraries", async () => {
     const { db, cleanup } = await tempDb();
     try {
-      upsertFiles(db, [row(), row({ path: "Other/x.mp3", library: "Other", folder: "Other", name: "x.mp3" })]);
+      upsertFiles(db, [
+        row(),
+        row({ path: "Other/x.mp3", library: "Other", folder: "Other", name: "x.mp3" }),
+      ]);
       addFavorite(db, "Podcasts/ep-12.mp3");
       addFavorite(db, "Other/x.mp3");
       expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
@@ -157,7 +178,11 @@ describe("peaks", () => {
       setPeaks(db, "Podcasts/ep-12.mp3", 100, new Uint8Array([0, 0, 0, 64])); // float32 2.0 (0x40000000 LE)
       const got = getPeaks(db, "Podcasts/ep-12.mp3");
       expect(got?.mtime).toBe(100);
-      expect(Array.from(new Float32Array(got!.data.buffer, got!.data.byteOffset, got!.data.byteLength / 4))).toEqual([2]);
+      expect(
+        Array.from(
+          new Float32Array(got!.data.buffer, got!.data.byteOffset, got!.data.byteLength / 4),
+        ),
+      ).toEqual([2]);
       upsertFiles(db, [row({ mtime: 200 })]); // file changed → peaks stale
       deleteStalePeaks(db);
       expect(getPeaks(db, "Podcasts/ep-12.mp3")).toBeNull();

@@ -1,9 +1,9 @@
-import { statSync, watch, type FSWatcher } from "node:fs";
-import { join } from "node:path";
 import type { Database } from "bun:sqlite";
+import { type FSWatcher, statSync, watch } from "node:fs";
+import { join } from "node:path";
 import type { Roots } from "./config";
-import type { EventBus } from "./events";
 import { getEnabledLibraries } from "./db";
+import type { EventBus } from "./events";
 import type { WalkDiff } from "./index";
 
 export interface WatchCtx {

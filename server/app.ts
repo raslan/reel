@@ -1,13 +1,24 @@
-import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import type { Database } from "bun:sqlite";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Database } from "bun:sqlite";
+import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { Roots } from "./config";
+import {
+  addFavorite,
+  countFilesByLibrary,
+  favoritePaths,
+  folderFiles,
+  getEnabledLibraries,
+  getFile,
+  isIndexedFile,
+  removeFavorite,
+  searchFiles,
+  setEnabledLibraries,
+} from "./db";
 import type { EventBus } from "./events";
-import type { PeaksService } from "./peaks";
 import { candidateLibraries, type WalkDiff } from "./index";
-import { addFavorite, countFilesByLibrary, favoritePaths, folderFiles, getFile, getEnabledLibraries, isIndexedFile, removeFavorite, searchFiles, setEnabledLibraries } from "./db";
+import type { PeaksService } from "./peaks";
 export interface AppCtx {
   db: Database;
   roots: Roots;
@@ -127,9 +138,7 @@ export function createApp(ctx: AppCtx): Hono {
 
   /* ---------- favorites ---------- */
 
-  app.get("/api/favorites", (c) =>
-    c.json({ paths: favoritePaths(db, getEnabledLibraries(db)) }),
-  );
+  app.get("/api/favorites", (c) => c.json({ paths: favoritePaths(db, getEnabledLibraries(db)) }));
 
   app.post("/api/favorites", async (c) => {
     const body = await c.req.json<{ path?: string }>().catch(() => null);

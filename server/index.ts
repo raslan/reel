@@ -1,13 +1,25 @@
-import { Glob } from "bun";
+import type { Database } from "bun:sqlite";
 import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, relative } from "node:path";
-import type { Database } from "bun:sqlite";
+import { Glob } from "bun";
 import type { Roots } from "./config";
-import { filesWithNullDuration, filesByLibrary, replaceLibraryFiles, setFileDuration, type FileRow } from "./db";
+import {
+  type FileRow,
+  filesByLibrary,
+  filesWithNullDuration,
+  replaceLibraryFiles,
+  setFileDuration,
+} from "./db";
 
-export const AUDIO_EXTS: Record<string, true> = {
-  ".wav": true, ".mp3": true, ".ogg": true, ".oga": true,
-  ".flac": true, ".m4a": true, ".aac": true, ".opus": true,
+const AUDIO_EXTS: Record<string, true> = {
+  ".wav": true,
+  ".mp3": true,
+  ".ogg": true,
+  ".oga": true,
+  ".flac": true,
+  ".m4a": true,
+  ".aac": true,
+  ".opus": true,
 };
 
 /** Walk one library. library "" = files directly under the libraries root (no recursion). */
@@ -18,8 +30,13 @@ export async function walkLibrary(roots: Roots, library: string): Promise<FileRo
       if (!(extname(entry) in AUDIO_EXTS)) continue;
       const st = await stat(join(roots.libraries, entry));
       rows.push({
-        path: entry, library: "", folder: "", name: entry,
-        size: st.size, mtime: st.mtimeMs / 1000, duration: null,
+        path: entry,
+        library: "",
+        folder: "",
+        name: entry,
+        size: st.size,
+        mtime: st.mtimeMs / 1000,
+        duration: null,
       });
     }
     return rows;
@@ -38,8 +55,13 @@ export async function walkLibrary(roots: Roots, library: string): Promise<FileRo
     const st = await stat(abs);
     const rel = relative(roots.libraries, abs);
     rows.push({
-      path: rel, library, folder: dirname(rel), name: basename(rel),
-      size: st.size, mtime: st.mtimeMs / 1000, duration: null,
+      path: rel,
+      library,
+      folder: dirname(rel),
+      name: basename(rel),
+      size: st.size,
+      mtime: st.mtimeMs / 1000,
+      duration: null,
     });
   }
   return rows;
@@ -86,9 +108,13 @@ export async function probeDuration(absPath: string): Promise<number | null> {
   try {
     const proc = Bun.spawn(
       [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         absPath,
       ],
       { stdout: "pipe", stderr: "pipe" },
@@ -111,7 +137,11 @@ export interface DurationPassResult {
 }
 
 /** Probe every file with NULL duration (bounded concurrency). */
-export async function runDurationPass(db: Database, roots: Roots, concurrency = 4): Promise<DurationPassResult> {
+export async function runDurationPass(
+  db: Database,
+  roots: Roots,
+  concurrency = 4,
+): Promise<DurationPassResult> {
   const pending = filesWithNullDuration(db);
   let i = 0;
   let count = 0;
@@ -134,7 +164,11 @@ export async function runDurationPass(db: Database, roots: Roots, concurrency = 
 }
 
 /** Walk + apply + duration pass for one library. */
-export async function rescanLibrary(db: Database, roots: Roots, library: string): Promise<WalkDiff> {
+export async function rescanLibrary(
+  db: Database,
+  roots: Roots,
+  library: string,
+): Promise<WalkDiff> {
   const walked = await walkLibrary(roots, library);
   const diff = applyWalk(db, library, walked);
   await runDurationPass(db, roots);

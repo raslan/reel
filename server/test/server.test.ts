@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import * as net from "node:net";
 import { mkdir } from "node:fs/promises";
+import * as net from "node:net";
 import { join } from "node:path";
 import { startServer } from "../server";
 import { makeTempDir } from "./helpers";
@@ -8,9 +8,15 @@ import { makeTempDir } from "./helpers";
 /** Raw HTTP GET (no URL normalization) — traversal tests can't be masked by fetch. */
 async function rawGet(base: string, path: string): Promise<{ status: number; body: string }> {
   const url = new URL(base);
-  const { promise, resolve: done, reject } = Promise.withResolvers<{ status: number; body: string }>();
+  const {
+    promise,
+    resolve: done,
+    reject,
+  } = Promise.withResolvers<{ status: number; body: string }>();
   const sock = net.connect({ host: url.hostname, port: Number(url.port) }, () => {
-    sock.write(`GET ${path} HTTP/1.1\r\nHost: ${url.hostname}:${url.port}\r\nConnection: close\r\n\r\n`);
+    sock.write(
+      `GET ${path} HTTP/1.1\r\nHost: ${url.hostname}:${url.port}\r\nConnection: close\r\n\r\n`,
+    );
   });
   const chunks: Buffer[] = [];
   sock.on("data", (c: Buffer) => chunks.push(c));
@@ -76,7 +82,7 @@ describe("server composition", () => {
     }
   });
 
-  test("serves a placeholder index until the frontend is built", async () => {
+  test("serves a placeholder index when the frontend is not built", async () => {
     const baseDir = await makeTempDir("reel-srv-");
     try {
       const lib = join(baseDir.dir, "lib");
@@ -85,10 +91,34 @@ describe("server composition", () => {
       const { server, stop } = await startServer({
         roots: { libraries: lib, data: join(baseDir.dir, "data") },
         port: 0,
+        publicDir: join(baseDir.dir, "public"),
       });
       const res = await fetch(`http://127.0.0.1:${server.port}/`);
       expect(res.status).toBe(200);
       expect(await res.text()).toContain("frontend not built");
+      await stop();
+    } finally {
+      await baseDir.cleanup();
+    }
+  });
+
+  test("serves the built index when present", async () => {
+    const baseDir = await makeTempDir("reel-srv-");
+    try {
+      const lib = join(baseDir.dir, "lib");
+      await mkdir(lib, { recursive: true });
+      await mkdir(join(baseDir.dir, "data"), { recursive: true });
+      const pub = join(baseDir.dir, "public");
+      await mkdir(pub, { recursive: true });
+      await Bun.write(join(pub, "index.html"), "<!doctype html><title>Reel</title>");
+      const { server, stop } = await startServer({
+        roots: { libraries: lib, data: join(baseDir.dir, "data") },
+        port: 0,
+        publicDir: pub,
+      });
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("<title>Reel</title>");
       await stop();
     } finally {
       await baseDir.cleanup();

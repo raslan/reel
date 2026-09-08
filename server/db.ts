@@ -100,10 +100,15 @@ export function folderFiles(db: Database, folder: string): FileRow[] {
 }
 
 export function countFilesByLibrary(db: Database, library: string): number {
-  return (db.query("SELECT COUNT(*) AS n FROM files WHERE library = ?").get(library) as { n: number }).n;
+  return (
+    db.query("SELECT COUNT(*) AS n FROM files WHERE library = ?").get(library) as { n: number }
+  ).n;
 }
 
-export function getFile(db: Database, path: string): { mtime: number; duration: number | null } | null {
+export function getFile(
+  db: Database,
+  path: string,
+): { mtime: number; duration: number | null } | null {
   const row = db.query("SELECT mtime, duration FROM files WHERE path = ?").get(path) as
     | { mtime: number; duration: number | null }
     | undefined;
@@ -112,9 +117,10 @@ export function getFile(db: Database, path: string): { mtime: number; duration: 
 
 /** All indexed files that still have no duration. */
 export function filesWithNullDuration(db: Database): { path: string; library: string }[] {
-  return db
-    .query("SELECT path, library FROM files WHERE duration IS NULL")
-    .all() as { path: string; library: string }[];
+  return db.query("SELECT path, library FROM files WHERE duration IS NULL").all() as {
+    path: string;
+    library: string;
+  }[];
 }
 
 /** Set a file's duration in seconds. */
@@ -127,7 +133,12 @@ export function setFileDuration(db: Database, path: string, duration: number): v
  * escaped. Optional `folder` restricts matches to that folder and its
  * subtrees (folder paths are relative to the library root).
  */
-export function searchFiles(db: Database, q: string, enabled: string[], folder?: string): FileRow[] {
+export function searchFiles(
+  db: Database,
+  q: string,
+  enabled: string[],
+  folder?: string,
+): FileRow[] {
   if (enabled.length === 0) return [];
   const inClause = enabled.map(() => "?").join(", ");
   const params: (string | number)[] = [...enabled];
@@ -144,11 +155,6 @@ export function searchFiles(db: Database, q: string, enabled: string[], folder?:
   sql += " ORDER BY name COLLATE NOCASE";
   return db.query(sql).all(...params) as FileRow[];
 }
-
-export function allFiles(db: Database, enabled: string[]): FileRow[] {
-  return searchFiles(db, "", enabled);
-}
-
 /* ---------- favorites ---------- */
 
 export function favoritePaths(db: Database, enabled: string[]): string[] {
@@ -164,7 +170,10 @@ export function favoritePaths(db: Database, enabled: string[]): string[] {
 }
 
 export function addFavorite(db: Database, path: string): void {
-  db.prepare("INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)").run(path, Date.now() / 1000);
+  db.prepare("INSERT OR IGNORE INTO favorites (path, added_at) VALUES (?, ?)").run(
+    path,
+    Date.now() / 1000,
+  );
 }
 
 export function removeFavorite(db: Database, path: string): void {
@@ -178,9 +187,9 @@ export function isIndexedFile(db: Database, path: string): boolean {
 /* ---------- peaks ---------- */
 
 export function getPeaks(db: Database, path: string): { mtime: number; data: Uint8Array } | null {
-  const row = db
-    .query("SELECT mtime, data FROM peaks WHERE path = ?")
-    .get(path) as { mtime: number; data: Uint8Array } | undefined;
+  const row = db.query("SELECT mtime, data FROM peaks WHERE path = ?").get(path) as
+    | { mtime: number; data: Uint8Array }
+    | undefined;
   return row ?? null;
 }
 
@@ -212,5 +221,7 @@ export function getEnabledLibraries(db: Database): string[] {
 }
 
 export function setEnabledLibraries(db: Database, enabled: string[]): void {
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('libraries', ?)").run(JSON.stringify(enabled));
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('libraries', ?)").run(
+    JSON.stringify(enabled),
+  );
 }

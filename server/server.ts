@@ -1,8 +1,8 @@
+import type { Database } from "bun:sqlite";
 import { join, resolve } from "node:path";
 import type { Server } from "bun";
-import type { Database } from "bun:sqlite";
 import { createApp } from "./app";
-import { resolveRoots, type Roots } from "./config";
+import { type Roots, resolveRoots } from "./config";
 import { getEnabledLibraries, openDb } from "./db";
 import { createBus } from "./events";
 import { applyWalk, rescanLibrary, runDurationPass, walkLibrary } from "./index";
@@ -28,15 +28,17 @@ function serveFrom(req: Request, root: string, prefix: string): Promise<Response
     return Promise.resolve(new Response("not found", { status: 404 }));
   }
   const file = Bun.file(abs);
-  return file.exists().then((exists) =>
-    exists ? new Response(file) : new Response("not found", { status: 404 }),
-  );
+  return file
+    .exists()
+    .then((exists) => (exists ? new Response(file) : new Response("not found", { status: 404 })));
 }
 
 export interface ServerOpts {
   /** Inject for tests; defaults to resolveRoots(). */
   roots?: Roots;
   port?: number;
+  /** Static frontend dir; defaults to the repo's public/. */
+  publicDir?: string;
 }
 
 export interface RunningServer {
@@ -67,7 +69,7 @@ export async function startServer(opts: ServerOpts = {}): Promise<RunningServer>
   }
 
   // Frontend: serve the built app if present, else a placeholder.
-  const publicDir = join(import.meta.dir, "..", "public");
+  const publicDir = opts.publicDir ?? join(import.meta.dir, "..", "public");
   const indexFile = Bun.file(join(publicDir, "index.html"));
   const indexHtml = (await indexFile.exists())
     ? new Response(await indexFile.bytes(), {

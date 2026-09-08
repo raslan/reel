@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
-import { applyWalk, candidateLibraries, probeDuration, rescanLibrary, runDurationPass, walkLibrary } from "../index";
+import {
+  applyWalk,
+  candidateLibraries,
+  probeDuration,
+  rescanLibrary,
+  runDurationPass,
+  walkLibrary,
+} from "../index";
 import { makeStackLite, makeTempDir, writeWav } from "./helpers";
 
 describe("walkLibrary", () => {
@@ -16,7 +23,10 @@ describe("walkLibrary", () => {
     });
     try {
       const rows = await walkLibrary(s.roots, "Podcasts");
-      expect(rows.map((r) => r.path).sort()).toEqual(["Podcasts/Comedians/ep-2.mp3", "Podcasts/ep-1.wav"]);
+      expect(rows.map((r) => r.path).sort()).toEqual([
+        "Podcasts/Comedians/ep-2.mp3",
+        "Podcasts/ep-1.wav",
+      ]);
       const c = rows.find((r) => r.path === "Podcasts/Comedians/ep-2.mp3")!;
       expect(c.folder).toBe("Podcasts/Comedians");
       expect(c.name).toBe("ep-2.mp3");
@@ -28,7 +38,7 @@ describe("walkLibrary", () => {
     }
   });
 
-  test("root library (\"\") lists only top-level audio files", async () => {
+  test('root library ("") lists only top-level audio files', async () => {
     const s = await makeStackLite({
       files: {
         "top.wav": "x",
@@ -59,14 +69,18 @@ describe("applyWalk", () => {
       s.db.prepare("UPDATE files SET duration = 0.5 WHERE path = ?").run("Podcasts/a.wav");
       diff = applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       expect(diff).toEqual({ added: 0, removed: 0, changed: 0 });
-      const kept = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as { duration: number | null };
+      const kept = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as {
+        duration: number | null;
+      };
       expect(kept.duration).toBe(0.5);
 
       await writeWav(p, 0.7);
       await utimes(p, 1_700_000_900, 1_700_000_900); // force a distinct mtime
       diff = applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       expect(diff.changed).toBe(1);
-      const reset = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as { duration: number | null };
+      const reset = s.db
+        .query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'")
+        .get() as { duration: number | null };
       expect(reset.duration).toBeNull();
 
       await rm(p);
@@ -123,9 +137,10 @@ describe("runDurationPass", () => {
       await writeWav(join(dir, "b.wav"), 2);
       applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       expect(await runDurationPass(s.db, s.roots)).toEqual({ count: 2, libraries: ["Podcasts"] });
-      const rows = s.db
-        .query("SELECT path, duration FROM files ORDER BY path")
-        .all() as { path: string; duration: number | null }[];
+      const rows = s.db.query("SELECT path, duration FROM files ORDER BY path").all() as {
+        path: string;
+        duration: number | null;
+      }[];
       expect(rows[0]).toEqual({ path: "Podcasts/a.wav", duration: expect.any(Number) });
       expect(rows[1]).toEqual({ path: "Podcasts/b.wav", duration: expect.any(Number) });
       expect(rows[0]!.duration!).toBeCloseTo(1, 1);
@@ -144,7 +159,9 @@ describe("rescanLibrary", () => {
       await writeWav(join(s.roots.libraries, "Podcasts/a.wav"), 1);
       const diff = await rescanLibrary(s.db, s.roots, "Podcasts");
       expect(diff.added).toBe(1);
-      const r = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as { duration: number };
+      const r = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as {
+        duration: number;
+      };
       expect(r.duration).toBeCloseTo(1, 1);
     } finally {
       await s.cleanup();

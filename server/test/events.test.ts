@@ -10,7 +10,10 @@ describe("EventBus", () => {
     bus.subscribe((event, data) => b.push([event, data]));
     bus.emit("library-changed");
     bus.emit("peaks-ready", { path: "x.wav" });
-    expect(a).toEqual([["library-changed", undefined], ["peaks-ready", { path: "x.wav" }]]);
+    expect(a).toEqual([
+      ["library-changed", undefined],
+      ["peaks-ready", { path: "x.wav" }],
+    ]);
     expect(b).toEqual(a);
   });
 
