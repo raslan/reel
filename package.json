@@ -1,6 +1,6 @@
 {
   "name": "reel",
-  "private": true,
+  "private": false,
   "type": "module",
   "scripts": {
     "start": "bun run server/server.ts",
