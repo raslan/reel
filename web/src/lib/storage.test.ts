@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isOnboarded, loadJSON, saveJSON, setOnboarded } from "./storage";
+import { loadJSON, saveJSON } from "./storage";
 
 afterEach(() => localStorage.clear());
 
@@ -13,11 +13,5 @@ describe("storage", () => {
     expect(loadJSON("missing", 42)).toBe(42);
     localStorage.setItem("bad", "{nope");
     expect(loadJSON("bad", 7)).toBe(7);
-  });
-
-  it("tracks the onboarding flag", () => {
-    expect(isOnboarded()).toBe(false);
-    setOnboarded();
-    expect(isOnboarded()).toBe(true);
   });
 });

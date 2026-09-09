@@ -36,10 +36,6 @@ CREATE TABLE IF NOT EXISTS peaks (
   buckets INTEGER NOT NULL,
   data    BLOB NOT NULL
 );
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
 `;
 
 export function openDb(path: string): Database {
@@ -136,36 +132,35 @@ export function setFileDuration(db: Database, path: string, duration: number): v
 export function searchFiles(
   db: Database,
   q: string,
-  enabled: string[],
   folder?: string,
 ): FileRow[] {
-  if (enabled.length === 0) return [];
-  const inClause = enabled.map(() => "?").join(", ");
-  const params: (string | number)[] = [...enabled];
-  let sql = `SELECT path, library, folder, name, size, mtime, duration FROM files WHERE library IN (${inClause})`;
+  const params: (string | number)[] = [];
+  let sql = "SELECT path, library, folder, name, size, mtime, duration FROM files";
+  const where: string[] = [];
   if (q) {
-    sql += ` AND name LIKE ? ESCAPE '\\'`;
+    where.push("name LIKE ? ESCAPE '\\'");
     params.push(`%${q.replace(/[\\%_]/g, (m) => "\\" + m)}%`);
   }
   if (folder) {
     const esc = folder.replace(/[\\%_]/g, (m) => "\\" + m);
-    sql += " AND (folder = ? OR folder LIKE ? ESCAPE '\\')";
+    where.push("(folder = ? OR folder LIKE ? ESCAPE '\\')");
     params.push(folder, `${esc}/%`);
   }
+  if (where.length > 0) sql += ` WHERE ${where.join(" AND ")}`;
   sql += " ORDER BY name COLLATE NOCASE";
   return db.query(sql).all(...params) as FileRow[];
 }
+
 /* ---------- favorites ---------- */
 
-export function favoritePaths(db: Database, enabled: string[]): string[] {
-  if (enabled.length === 0) return [];
-  const inClause = enabled.map(() => "?").join(", ");
+export function favoritePaths(db: Database): string[] {
+  // Favorites for deleted files are dropped by replaceLibraryFiles on rescan.
   return (
     db
       .query(
-        `SELECT f.path FROM favorites f JOIN files x ON x.path = f.path WHERE x.library IN (${inClause}) ORDER BY f.path`,
+        "SELECT f.path FROM favorites f JOIN files x ON x.path = f.path ORDER BY f.path",
       )
-      .all(...enabled) as { path: string }[]
+      .all() as { path: string }[]
   ).map((r) => r.path);
 }
 
@@ -209,19 +204,4 @@ export function deleteStalePeaks(db: Database): void {
       SELECT 1 FROM files f WHERE f.path = peaks.path AND f.mtime = peaks.mtime
     )
   `);
-}
-
-/* ---------- settings ---------- */
-
-export function getEnabledLibraries(db: Database): string[] {
-  const row = db.query("SELECT value FROM settings WHERE key = 'libraries'").get() as
-    | { value: string }
-    | undefined;
-  return row ? (JSON.parse(row.value) as string[]) : [];
-}
-
-export function setEnabledLibraries(db: Database, enabled: string[]): void {
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('libraries', ?)").run(
-    JSON.stringify(enabled),
-  );
 }

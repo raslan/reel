@@ -1,13 +1,10 @@
-import type { Database } from "bun:sqlite";
 import { type FSWatcher, statSync, watch } from "node:fs";
 import { join } from "node:path";
 import type { Roots } from "./config";
-import { getEnabledLibraries } from "./db";
 import type { EventBus } from "./events";
-import type { WalkDiff } from "./index";
+import { candidateLibraries, type WalkDiff } from "./index";
 
 export interface WatchCtx {
-  db: Database;
   roots: Roots;
   bus: EventBus;
   /** Walk + duration pass for one library (no event emission). */
@@ -17,25 +14,22 @@ export interface WatchCtx {
 export interface WatcherHandle {
   /** Close all watchers and pending debounce timers. */
   stop(): void;
-  /** Align per-library watchers with the currently enabled libraries. */
-  resync(): void;
 }
 
 /**
- * One recursive watcher per enabled library (debounced rescan of that
- * library) plus one non-recursive watcher on the libraries root
- * (new/removed top-level folders → `libraries-changed`).
- * Registration failures log a warning; recovery is the startup scan and
- * the manual rescan endpoint.
+ * One recursive watcher per library (debounced rescan of that library) plus
+ * one non-recursive watcher on the libraries root. The root watcher keeps the
+ * set aligned with the directories actually present: new top-level folders are
+ * indexed and watched, removed ones drop their watcher. Registration failures
+ * log a warning; recovery is the startup scan and the manual rescan endpoint.
  */
 export function startWatchers(ctx: WatchCtx): WatcherHandle {
-  const { db, roots, bus, rescan } = ctx;
+  const { roots, bus, rescan } = ctx;
   const libWatchers = new Map<string, FSWatcher>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
   function schedule(key: string, fn: () => void, ms = 700): void {
-    const existing = timers.get(key);
-    if (existing) clearTimeout(existing);
+    clearTimeout(timers.get(key));
     timers.set(
       key,
       setTimeout(() => {
@@ -62,15 +56,27 @@ export function startWatchers(ctx: WatchCtx): WatcherHandle {
     }
   }
 
+  /** Align per-library watchers with the directories present under the root. */
   function resync(): void {
-    const enabled = new Set(getEnabledLibraries(db));
-    for (const [lib, w] of libWatchers) {
-      if (!enabled.has(lib)) {
-        w.close();
-        libWatchers.delete(lib);
+    void (async () => {
+      const present = new Set((await candidateLibraries(roots)).map((l) => l.path));
+      for (const [lib, w] of libWatchers) {
+        if (!present.has(lib)) {
+          w.close();
+          libWatchers.delete(lib);
+        }
       }
-    }
-    for (const lib of enabled) watchLibrary(lib);
+      for (const lib of present) {
+        if (lib === "") continue; // root-as-library is covered by the root watcher
+        const isNew = !libWatchers.has(lib);
+        watchLibrary(lib);
+        if (isNew) {
+          // Index the folder's contents now that it is part of the library set.
+          const d = await rescan(lib);
+          if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib });
+        }
+      }
+    })();
   }
 
   resync();
@@ -78,7 +84,10 @@ export function startWatchers(ctx: WatchCtx): WatcherHandle {
   let rootWatcher: FSWatcher | null = null;
   try {
     rootWatcher = watch(roots.libraries, { recursive: false }, () => {
-      schedule("root", () => bus.emit("libraries-changed"));
+      schedule("root", () => {
+        resync();
+        bus.emit("libraries-changed");
+      });
     });
   } catch (err) {
     console.warn(`reel: watch failed for ${roots.libraries}:`, err);
@@ -92,6 +101,5 @@ export function startWatchers(ctx: WatchCtx): WatcherHandle {
       libWatchers.clear();
       rootWatcher?.close();
     },
-    resync,
   };
 }

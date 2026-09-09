@@ -1,12 +1,10 @@
 import { cn } from "cn";
 import { CassetteTape, FolderOpen, Search, Settings, Star } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Onboarding } from "./components/Onboarding";
+import { useEffect } from "react";
 import { PlayerBar } from "./components/PlayerBar";
 import { ZenPlayer } from "./components/ZenPlayer";
 import { useAudio } from "./hooks/useAudio";
 import { useLibraryEvents } from "./hooks/useLibraryEvents";
-import { isOnboarded } from "./lib/storage";
 import { FavoritesScreen } from "./screens/FavoritesScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { SearchScreen } from "./screens/SearchScreen";
@@ -26,7 +24,6 @@ export function App() {
   const dispatch = useAppDispatch();
   const { togglePlay, seekBy, cycleSpeed } = useAudio();
   useLibraryEvents();
-  const [onboarded, setOnboarded] = useState(isOnboarded);
 
   // Global keyboard: Space, arrows, Esc.
   useEffect(() => {
@@ -50,20 +47,19 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [togglePlay, seekBy, cycleSpeed, dispatch]);
 
-  const screen = !onboarded ? (
-    <Onboarding onDone={() => setOnboarded(true)} />
-  ) : state.screen === "search" ? (
-    <SearchScreen />
-  ) : state.screen === "favorites" ? (
-    <FavoritesScreen />
-  ) : state.screen === "settings" ? (
-    <SettingsScreen />
-  ) : (
-    <LibraryScreen />
-  );
+  const screen =
+    state.screen === "search" ? (
+      <SearchScreen />
+    ) : state.screen === "favorites" ? (
+      <FavoritesScreen />
+    ) : state.screen === "settings" ? (
+      <SettingsScreen />
+    ) : (
+      <LibraryScreen />
+    );
 
   return (
-    <div className="h-dvh flex flex-col bg-bg text-fg">
+    <div className="h-dvh flex bg-bg text-fg">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-[210px] shrink-0 border-r border-line bg-panel/40 brushed px-3 py-5">
         <div className="flex items-center gap-2 px-2 mb-6">

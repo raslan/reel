@@ -3,23 +3,12 @@
   "workspaces": {
     ".": {
       "entry": [
-        "web/src/main.tsx",
-        "vite.config.ts!",
-        "vitest.config.ts!",
-        "server/server.ts!",
         "server/test/**/*.test.ts",
+        "web/src/**/*.test.ts",
         "test/**/*.test.ts"
       ],
-      "project": [
-        "web/src/**/*.{ts,tsx}",
-        "server/**/*.ts",
-        "test/**/*.ts",
-        "vite.config.ts",
-        "vitest.config.ts"
-      ],
       "ignoreDependencies": [
-        "tailwindcss",
-        "tw-animate-css"
+        "shadcn"
       ]
     }
   }

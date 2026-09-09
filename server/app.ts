@@ -9,12 +9,10 @@ import {
   countFilesByLibrary,
   favoritePaths,
   folderFiles,
-  getEnabledLibraries,
   getFile,
   isIndexedFile,
   removeFavorite,
   searchFiles,
-  setEnabledLibraries,
 } from "./db";
 import type { EventBus } from "./events";
 import { candidateLibraries, type WalkDiff } from "./index";
@@ -26,8 +24,6 @@ export interface AppCtx {
   peaks: PeaksService;
   /** Walk + duration pass for one library. */
   rescan: (library: string) => Promise<WalkDiff>;
-  /** Called after the enabled-library set changes (e.g. to resync watchers). */
-  onLibrariesChanged?: () => void;
 }
 
 const byNameCI = (a: { name: string }, b: { name: string }) =>
@@ -53,35 +49,13 @@ export function createApp(ctx: AppCtx): Hono {
 
   app.get("/api/libraries", async (c) => {
     const candidates = await candidateLibraries(roots);
-    const enabled = new Set(getEnabledLibraries(db));
     return c.json({
       libraries: candidates.map((lib) => ({
         name: lib.name,
         path: lib.path,
         audioFiles: countFilesByLibrary(db, lib.path),
-        enabled: enabled.has(lib.path),
       })),
     });
-  });
-
-  app.put("/api/libraries", async (c) => {
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => null);
-    if (!body || !Array.isArray(body.enabled) || body.enabled.some((n) => typeof n !== "string")) {
-      return c.json({ error: "expected { enabled: string[] }" }, 400);
-    }
-    const candidates = new Set((await candidateLibraries(roots)).map((l) => l.path));
-    const next = [...new Set(body.enabled as string[])].filter((n) => candidates.has(n));
-    const prev = getEnabledLibraries(db);
-    setEnabledLibraries(db, next);
-    ctx.onLibrariesChanged?.();
-    bus.emit("libraries-changed");
-    for (const lib of next) {
-      if (prev.includes(lib)) continue;
-      void ctx.rescan(lib).then((d) => {
-        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib });
-      });
-    }
-    return c.json({ ok: true });
   });
 
   /* ---------- list ---------- */
@@ -91,8 +65,7 @@ export function createApp(ctx: AppCtx): Hono {
     if (!(await isKnownFolder(p))) return c.json({ error: "not found" }, 404);
     let folders: { name: string; path: string }[];
     if (p === "") {
-      const enabled = new Set(getEnabledLibraries(db));
-      folders = (await candidateLibraries(roots)).filter((l) => enabled.has(l.path));
+      folders = await candidateLibraries(roots);
     } else {
       const dir = join(roots.libraries, p);
       const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -112,8 +85,8 @@ export function createApp(ctx: AppCtx): Hono {
 
   async function isKnownFolder(p: string): Promise<boolean> {
     if (p === "") return true;
-    const first = p.split("/")[0]!;
-    if (!getEnabledLibraries(db).includes(first)) return false;
+    // Traversal guard: only plain relative segments under the libraries root.
+    if (p.split("/").some((seg) => seg === "" || seg === "." || seg === "..")) return false;
     try {
       const st = await stat(join(roots.libraries, p));
       return st.isDirectory();
@@ -127,7 +100,7 @@ export function createApp(ctx: AppCtx): Hono {
   app.get("/api/search", (c) => {
     const q = (c.req.query("q") ?? "").trim();
     const folder = (c.req.query("folder") ?? "").trim();
-    const files = searchFiles(db, q, getEnabledLibraries(db), folder || undefined).map((r) => ({
+    const files = searchFiles(db, q, folder || undefined).map((r) => ({
       name: r.name,
       path: r.path,
       duration: r.duration,
@@ -138,7 +111,7 @@ export function createApp(ctx: AppCtx): Hono {
 
   /* ---------- favorites ---------- */
 
-  app.get("/api/favorites", (c) => c.json({ paths: favoritePaths(db, getEnabledLibraries(db)) }));
+  app.get("/api/favorites", (c) => c.json({ paths: favoritePaths(db) }));
 
   app.post("/api/favorites", async (c) => {
     const body = await c.req.json<{ path?: string }>().catch(() => null);
@@ -178,9 +151,9 @@ export function createApp(ctx: AppCtx): Hono {
 
   app.post("/api/rescan", (c) => {
     void (async () => {
-      for (const lib of getEnabledLibraries(db)) {
-        const d = await ctx.rescan(lib);
-        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib });
+      for (const lib of await candidateLibraries(roots)) {
+        const d = await ctx.rescan(lib.path);
+        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib.path });
       }
     })();
     return c.json({ status: "started" }, 202);

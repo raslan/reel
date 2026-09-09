@@ -2,7 +2,6 @@ export interface LibraryInfo {
   name: string;
   path: string;
   audioFiles: number;
-  enabled: boolean;
 }
 
 export interface FolderEntry {

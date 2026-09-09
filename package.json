@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "bun run server/server.ts",
-    "dev": "concurrently -n server,web -c yellow,cyan \"bun run server/server.ts\" \"vite\"",
+    "dev": "concurrently -n server,web -c yellow,cyan \"bun run server/server.ts\" \"vite --host\"",
     "dev:web": "vite",
     "test": "bun test server/test && vitest run",
     "check": "tsc --noEmit && tsc --noEmit -p web",
@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
-    "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/instrument-sans": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
     "@formkit/auto-animate": "^0.10.0",
@@ -35,20 +34,17 @@
     "radix-ui": "^1.6.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "shadcn": "^4.21.0",
     "sonner": "^2.0.8"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@tailwindcss/vite": "^4.3.3",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.1",
     "@types/bun": "^1.1.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",
+    "shadcn": "^4.21.0",
     "husky": "^9.1.7",
     "jsdom": "^30.0.1",
     "knip": "^6.34.0",

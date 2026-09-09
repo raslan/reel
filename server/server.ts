@@ -3,9 +3,9 @@ import { join, resolve } from "node:path";
 import type { Server } from "bun";
 import { createApp } from "./app";
 import { type Roots, resolveRoots } from "./config";
-import { getEnabledLibraries, openDb } from "./db";
+import { openDb } from "./db";
 import { createBus } from "./events";
-import { applyWalk, rescanLibrary, runDurationPass, walkLibrary } from "./index";
+import { applyWalk, candidateLibraries, rescanLibrary, runDurationPass, walkLibrary } from "./index";
 import { PeaksService } from "./peaks";
 import { startWatchers, type WatcherHandle } from "./watch";
 
@@ -53,19 +53,13 @@ export async function startServer(opts: ServerOpts = {}): Promise<RunningServer>
   const bus = createBus();
   const peaks = new PeaksService(db, roots, bus);
   const rescan = (lib: string) => rescanLibrary(db, roots, lib);
-  const watchers: WatcherHandle = startWatchers({ db, roots, bus, rescan });
-  const app = createApp({
-    db,
-    roots,
-    bus,
-    peaks,
-    rescan,
-    onLibrariesChanged: () => watchers.resync(),
-  });
+  const watchers: WatcherHandle = startWatchers({ roots, bus, rescan });
+  const app = createApp({ db, roots, bus, peaks, rescan });
 
-  // Startup: index enabled libraries (fast walk; durations filled in later).
-  for (const lib of getEnabledLibraries(db)) {
-    applyWalk(db, lib, await walkLibrary(roots, lib));
+  // Startup: index every library (fast walk; durations filled in later).
+  for (const lib of await candidateLibraries(roots)) {
+    if (lib.path === "") continue;
+    applyWalk(db, lib.path, await walkLibrary(roots, lib.path));
   }
 
   // Frontend: serve the built app if present, else a placeholder.

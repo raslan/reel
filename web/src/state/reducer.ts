@@ -4,7 +4,7 @@ export type Screen = "library" | "search" | "favorites" | "settings";
 
 export interface AppState {
   screen: Screen;
-  /** '' = library root (the enabled libraries). */
+  /** '' = library root (all libraries). */
   folderPath: string;
   /** In-folder search text (Library screen). */
   folderQuery: string;
@@ -22,9 +22,9 @@ export interface AppState {
   deadPaths: string[];
 }
 
-export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 
-export const defaultSort: SortPref = { key: "name", dir: 1 };
+const defaultSort: SortPref = { key: "name", dir: 1 };
 
 export function initialState(volume = 100): AppState {
   return {

@@ -11,13 +11,11 @@ import {
   favoritePaths,
   filesByLibrary,
   folderFiles,
-  getEnabledLibraries,
   getPeaks,
   openDb,
   removeFavorite,
   replaceLibraryFiles,
   searchFiles,
-  setEnabledLibraries,
   setPeaks,
   upsertFiles,
 } from "../db";
@@ -46,7 +44,7 @@ const row = (over: Partial<FileRow> = {}): FileRow => ({
 });
 
 describe("db schema", () => {
-  test("creates files, favorites, peaks, settings", async () => {
+  test("creates files, favorites, peaks", async () => {
     const { db, cleanup } = await tempDb();
     try {
       const tables = (
@@ -54,7 +52,7 @@ describe("db schema", () => {
       )
         .map((r) => r.name)
         .sort();
-      expect(tables).toEqual(expect.arrayContaining(["files", "favorites", "peaks", "settings"]));
+      expect(tables).toEqual(expect.arrayContaining(["files", "favorites", "peaks"]));
     } finally {
       await cleanup();
     }
@@ -78,7 +76,7 @@ describe("files", () => {
     }
   });
 
-  test("searchFiles is case-insensitive, escapes wildcards, empty enabled → []", async () => {
+  test("searchFiles is case-insensitive, escapes wildcards, empty q returns all", async () => {
     const { db, cleanup } = await tempDb();
     try {
       upsertFiles(db, [
@@ -86,12 +84,12 @@ describe("files", () => {
         row({ path: "Podcasts/100% sure.mp3", name: "100% sure.mp3" }),
         row({ path: "Podcasts/100 sure.mp3", name: "100 sure.mp3" }),
       ]);
-      expect(searchFiles(db, "ep-12", ["Podcasts"]).map((r) => r.name)).toEqual(["Ep-12.mp3"]);
-      expect(searchFiles(db, "100% sure", ["Podcasts"]).map((r) => r.name)).toEqual([
+      expect(searchFiles(db, "ep-12").map((r) => r.name)).toEqual(["Ep-12.mp3"]);
+      expect(searchFiles(db, "100% sure").map((r) => r.name)).toEqual([
         "100% sure.mp3",
       ]);
-      expect(searchFiles(db, "100%", ["Podcasts"]).map((r) => r.name)).toEqual(["100% sure.mp3"]); // % escaped: literal, not wildcard
-      expect(searchFiles(db, "ep", [])).toEqual([]);
+      expect(searchFiles(db, "100%").map((r) => r.name)).toEqual(["100% sure.mp3"]); // % escaped: literal, not wildcard
+      expect(searchFiles(db, "").length).toBe(3);
     } finally {
       await cleanup();
     }
@@ -120,10 +118,10 @@ describe("favorites", () => {
       upsertFiles(db, [row()]);
       addFavorite(db, "Podcasts/ep-12.mp3");
       addFavorite(db, "Podcasts/ep-12.mp3");
-      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+      expect(favoritePaths(db)).toEqual(["Podcasts/ep-12.mp3"]);
       removeFavorite(db, "Podcasts/ep-12.mp3");
       removeFavorite(db, "Podcasts/ep-12.mp3");
-      expect(favoritePaths(db, ["Podcasts"])).toEqual([]);
+      expect(favoritePaths(db)).toEqual([]);
     } finally {
       await cleanup();
     }
@@ -135,7 +133,7 @@ describe("favorites", () => {
       upsertFiles(db, [row()]);
       addFavorite(db, "Podcasts/ep-12.mp3");
       replaceLibraryFiles(db, "Podcasts", [row()]);
-      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+      expect(favoritePaths(db)).toEqual(["Podcasts/ep-12.mp3"]);
     } finally {
       await cleanup();
     }
@@ -148,14 +146,14 @@ describe("favorites", () => {
       addFavorite(db, "Podcasts/ep-12.mp3");
       addFavorite(db, "Podcasts/gone.mp3");
       replaceLibraryFiles(db, "Podcasts", [row()]);
-      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+      expect(favoritePaths(db)).toEqual(["Podcasts/ep-12.mp3"]);
       expect((db.query("SELECT COUNT(*) AS n FROM favorites").get() as { n: number }).n).toBe(1);
     } finally {
       await cleanup();
     }
   });
 
-  test("favoritePaths filters to enabled libraries", async () => {
+  test("favoritePaths skips favorites whose file is not indexed", async () => {
     const { db, cleanup } = await tempDb();
     try {
       upsertFiles(db, [
@@ -164,7 +162,8 @@ describe("favorites", () => {
       ]);
       addFavorite(db, "Podcasts/ep-12.mp3");
       addFavorite(db, "Other/x.mp3");
-      expect(favoritePaths(db, ["Podcasts"])).toEqual(["Podcasts/ep-12.mp3"]);
+      addFavorite(db, "Ghost/gone.mp3"); // never indexed
+      expect(favoritePaths(db)).toEqual(["Other/x.mp3", "Podcasts/ep-12.mp3"]);
     } finally {
       await cleanup();
     }
@@ -192,15 +191,3 @@ describe("peaks", () => {
   });
 });
 
-describe("settings", () => {
-  test("enabled libraries round-trip", async () => {
-    const { db, cleanup } = await tempDb();
-    try {
-      expect(getEnabledLibraries(db)).toEqual([]);
-      setEnabledLibraries(db, ["Podcasts", "Field Recordings"]);
-      expect(getEnabledLibraries(db)).toEqual(["Podcasts", "Field Recordings"]);
-    } finally {
-      await cleanup();
-    }
-  });
-});

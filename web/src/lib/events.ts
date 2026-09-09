@@ -1,4 +1,4 @@
-export const EVENT_NAMES = [
+const EVENT_NAMES = [
   "library-changed",
   "libraries-changed",
   "peaks-ready",

@@ -6,7 +6,7 @@ import type { Server } from "bun";
 import type { Hono } from "hono";
 import { createApp } from "../app";
 import type { Roots } from "../config";
-import { openDb, setEnabledLibraries } from "../db";
+import { openDb } from "../db";
 import { createBus, type EventBus } from "../events";
 import { rescanLibrary, type WalkDiff } from "../index";
 import { PeaksService } from "../peaks";
@@ -75,7 +75,6 @@ export interface StackLite {
 
 export async function makeStackLite(opts?: {
   files?: Record<string, string>;
-  enabled?: string[];
 }): Promise<StackLite> {
   const { dir: lib, cleanup: libCleanup } = await makeTempDir("reel-lib-");
   const { dir: data, cleanup: dataCleanup } = await makeTempDir("reel-data-");
@@ -84,7 +83,6 @@ export async function makeStackLite(opts?: {
   const roots: Roots = { libraries: lib, data };
   const bus = createBus();
   const peaks = new PeaksService(db, roots, bus);
-  if (opts?.enabled) setEnabledLibraries(db, opts.enabled);
   return {
     db,
     roots,
@@ -112,7 +110,6 @@ interface LibraryInfo {
   name: string;
   path: string;
   audioFiles: number;
-  enabled: boolean;
 }
 
 interface FileEntry {
@@ -147,7 +144,6 @@ export async function json<T>(res: Response): Promise<T> {
 /** Full HTTP stack: Hono app behind Bun.serve on a random port. */
 export async function makeStack(opts?: {
   files?: Record<string, string>;
-  enabled?: string[];
 }): Promise<Stack> {
   const lite = await makeStackLite(opts);
   const rescan = (lib: string) => rescanLibrary(lite.db, lite.roots, lib);

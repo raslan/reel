@@ -15,13 +15,3 @@ export function saveJSON(key: string, value: unknown): void {
     // storage unavailable — persistence silently degrades
   }
 }
-
-export const ONBOARDING_KEY = "reel:onboarded";
-
-export function isOnboarded(): boolean {
-  return loadJSON(ONBOARDING_KEY, false);
-}
-
-export function setOnboarded(): void {
-  saveJSON(ONBOARDING_KEY, true);
-}

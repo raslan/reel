@@ -22,7 +22,7 @@ export interface OkResponse {
   ok: boolean;
 }
 
-export type PeaksStatus = "ready" | "pending" | "failed";
+type PeaksStatus = "ready" | "pending" | "failed";
 
 export interface PeaksResponse {
   status: PeaksStatus;

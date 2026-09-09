@@ -1,54 +1,22 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { cn } from "cn";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "../components/EmptyState";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
-import { Switch } from "../components/ui/switch";
 import { useLibraries } from "../hooks/useLibraries";
-import { errorMessage, rescan, setLibraries } from "../lib/api";
-import { librariesKey } from "../lib/keys";
-import type { LibrariesResponse } from "../types/api";
+import { errorMessage, rescan } from "../lib/api";
 
 export function SettingsScreen() {
-  const qc = useQueryClient();
   const libraries = useLibraries();
   const libs = libraries.data?.libraries ?? [];
-
-  const toggleLib = useMutation({
-    mutationFn: async (vars: { path: string; enable: boolean }) => {
-      const enabled = vars.enable
-        ? [...new Set([...libs.map((l) => l.path), vars.path])]
-        : libs.filter((l) => l.path !== vars.path).map((l) => l.path);
-      return setLibraries(enabled);
-    },
-    onMutate: async ({ path, enable }) => {
-      await qc.cancelQueries({ queryKey: librariesKey });
-      const prev = qc.getQueryData<LibrariesResponse>(librariesKey);
-      if (prev) {
-        qc.setQueryData<LibrariesResponse>(librariesKey, {
-          libraries: prev.libraries.map((l) => (l.path === path ? { ...l, enabled: enable } : l)),
-        });
-      }
-      return { prev };
-    },
-    onError: (err, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(librariesKey, ctx.prev);
-      toast.error(errorMessage(err));
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: librariesKey });
-    },
-  });
 
   const doRescan = useMutation({
     mutationFn: rescan,
     onSuccess: () => toast.success("Rescan started"),
     onError: (err) => toast.error(errorMessage(err)),
   });
-
-  const allDisabled = libs.length > 0 && libs.every((l) => !l.enabled);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -85,11 +53,6 @@ export function SettingsScreen() {
                       {l.audioFiles} files · {l.path}
                     </div>
                   </div>
-                  <Switch
-                    checked={l.enabled}
-                    onCheckedChange={(on) => toggleLib.mutate({ path: l.path, enable: on })}
-                    aria-label={`Enable ${l.name}`}
-                  />
                 </div>
               ))}
             </div>
@@ -112,7 +75,7 @@ export function SettingsScreen() {
               variant="outline"
               size="sm"
               onClick={() => doRescan.mutate()}
-              disabled={doRescan.isPending || allDisabled}
+              disabled={doRescan.isPending}
               className={cn("gap-1.5", doRescan.isPending && "pointer-events-none")}
             >
               <RefreshCw className={cn("w-3.5 h-3.5", doRescan.isPending && "animate-spin")} />

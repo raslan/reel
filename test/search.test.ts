@@ -49,7 +49,7 @@ afterAll(async () => {
 
 describe("searchFiles", () => {
   it("returns all matches with no scope", () => {
-    expect(searchFiles(db, "mp3", ["pod"], undefined).map((r) => r.name)).toEqual([
+    expect(searchFiles(db, "mp3", undefined).map((r) => r.name)).toEqual([
       "a.mp3",
       "b.mp3",
       "c.mp3",
@@ -57,16 +57,16 @@ describe("searchFiles", () => {
   });
 
   it("restricts matches to the scoped folder tree", () => {
-    const rows = searchFiles(db, "mp3", ["pod"], "pod/podcasts/tech");
+    const rows = searchFiles(db, "mp3", "pod/podcasts/tech");
     expect(rows.map((r) => r.name)).toEqual(["a.mp3", "b.mp3"]);
   });
 
   it("matches the scope itself and its subtrees", () => {
-    const rows = searchFiles(db, "mp3", ["pod"], "pod/podcasts");
+    const rows = searchFiles(db, "mp3", "pod/podcasts");
     expect(rows.map((r) => r.name)).toEqual(["a.mp3", "b.mp3", "c.mp3"]);
   });
 
   it("returns nothing when the scope has no matches", () => {
-    expect(searchFiles(db, "mp3", ["pod"], "pod/asmr")).toEqual([]);
+    expect(searchFiles(db, "mp3", "pod/asmr")).toEqual([]);
   });
 });

@@ -74,14 +74,13 @@ describe("GET /api/health", () => {
 });
 
 describe("GET /api/libraries", () => {
-  test("lists candidates with enabled flag and file counts", async () => {
+  test("lists candidates with file counts", async () => {
     const s = await makeStack({
       files: {
         "Podcasts/a.wav": "x",
         "Field Recordings/b.wav": "x",
         "Field Recordings/Sub/c.wav": "x",
       },
-      enabled: ["Podcasts"],
     });
     try {
       await s.rescan("Podcasts");
@@ -89,32 +88,9 @@ describe("GET /api/libraries", () => {
       expect(res.status).toBe(200);
       const body = await json<LibrariesBody>(res);
       expect(body.libraries).toEqual([
-        { name: "Field Recordings", path: "Field Recordings", audioFiles: 0, enabled: false },
-        { name: "Podcasts", path: "Podcasts", audioFiles: 1, enabled: true },
+        { name: "Field Recordings", path: "Field Recordings", audioFiles: 0 },
+        { name: "Podcasts", path: "Podcasts", audioFiles: 1 },
       ]);
-    } finally {
-      await s.cleanup();
-    }
-  });
-});
-
-describe("PUT /api/libraries", () => {
-  test("enables a library, discards unknown names, triggers a background rescan", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
-    try {
-      const res = await fetch(`${s.base}/api/libraries`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enabled: ["Podcasts", "Nope"] }),
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
-      const body = await json<LibrariesBody>(await fetch(`${s.base}/api/libraries`));
-      expect(body.libraries.find((l) => l.path === "Podcasts")).toMatchObject({ enabled: true });
-      // await the background rescan's terminal event instead of polling
-      await waitForEvent(s, "Podcasts", "library-changed");
-      const list = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`));
-      expect(list.files).toEqual([expect.objectContaining({ path: "Podcasts/a.wav" })]);
     } finally {
       await s.cleanup();
     }
@@ -129,7 +105,6 @@ describe("GET /api/list", () => {
         "Podcasts/Sub/c.wav": "x",
         "Podcasts/notes.txt": "x",
       },
-      enabled: ["Podcasts"],
     });
     try {
       await writeWav(join(s.roots.libraries, "Podcasts/a.wav"), 3000, 440);
@@ -154,11 +129,12 @@ describe("GET /api/list", () => {
     }
   });
 
-  test("404 for disabled libraries and unknown folders", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: [] });
+  test("404 for unknown folders and traversal attempts", async () => {
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
     try {
-      expect((await fetch(`${s.base}/api/list?path=Podcasts`)).status).toBe(404);
+      expect((await fetch(`${s.base}/api/list?path=Ghost`)).status).toBe(404);
       expect((await fetch(`${s.base}/api/list?path=Podcasts/Ghost`)).status).toBe(404);
+      expect((await fetch(`${s.base}/api/list?path=..%2F..`)).status).toBe(404);
     } finally {
       await s.cleanup();
     }
@@ -166,14 +142,13 @@ describe("GET /api/list", () => {
 });
 
 describe("GET /api/search", () => {
-  test("case-insensitive substring, unbounded, empty q returns all enabled", async () => {
+  test("case-insensitive substring, unbounded, empty q returns all files", async () => {
     const s = await makeStack({
       files: {
         "Podcasts/Ep-12.mp3": "x",
         "Podcasts/ep-13.mp3": "x",
         "Field Recordings/rain.wav": "x",
       },
-      enabled: ["Podcasts", "Field Recordings"],
     });
     try {
       await s.rescan("Podcasts");
@@ -190,25 +165,11 @@ describe("GET /api/search", () => {
     }
   });
 
-  test("excludes files from disabled libraries", async () => {
-    const s = await makeStack({
-      files: { "Podcasts/a.mp3": "x", "Other/b.mp3": "x" },
-      enabled: ["Podcasts"],
-    });
-    try {
-      await s.rescan("Podcasts");
-      await s.rescan("Other"); // indexed, but disabled
-      const q = await json<SearchBody>(await fetch(`${s.base}/api/search?q=`));
-      expect(q.files.map((f) => f.path)).toEqual(["Podcasts/a.mp3"]);
-    } finally {
-      await s.cleanup();
-    }
-  });
 });
 
 describe("favorites", () => {
   test("add, list, remove round-trip; 404 for unknown path", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.mp3": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStack({ files: { "Podcasts/a.mp3": "x" } });
     try {
       await s.rescan("Podcasts");
       const add = await fetch(`${s.base}/api/favorites`, {
@@ -237,7 +198,7 @@ describe("favorites", () => {
   });
 
   test("adding the same favorite twice is idempotent", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.mp3": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStack({ files: { "Podcasts/a.mp3": "x" } });
     try {
       await s.rescan("Podcasts");
       const body = JSON.stringify({ path: "Podcasts/a.mp3" });
@@ -303,7 +264,7 @@ describe("GET /api/peaks", () => {
 
 describe("POST /api/rescan", () => {
   test("returns 202 and picks up new files", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
     try {
       await s.rescan("Podcasts");
       await Bun.write(join(s.roots.libraries, "Podcasts/b.wav"), "x");
@@ -322,7 +283,7 @@ describe("POST /api/rescan", () => {
 
 describe("SSE /api/events", () => {
   test("delivers library-changed after a rescan that changed the index", async () => {
-    const s = await makeStack({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
     try {
       await s.rescan("Podcasts");
       const sse = await readSSE(

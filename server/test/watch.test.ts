@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { watch } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { rescanLibrary } from "../index";
 import { startWatchers } from "../watch";
@@ -20,7 +20,6 @@ const it = canWatch ? test : test.skip;
 
 function watchCtx(s: StackLite) {
   return {
-    db: s.db,
     roots: s.roots,
     bus: s.bus,
     rescan: (lib: string) => rescanLibrary(s.db, s.roots, lib),
@@ -29,7 +28,7 @@ function watchCtx(s: StackLite) {
 
 describe("watch", () => {
   it("file creation in a watched library updates the index and emits library-changed", async () => {
-    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" } });
     const w = startWatchers(watchCtx(s));
     try {
       await rescanLibrary(s.db, s.roots, "Podcasts"); // initial index
@@ -45,7 +44,7 @@ describe("watch", () => {
   });
 
   it("file deletion removes it from the index and drops its favorite", async () => {
-    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" } });
     const w = startWatchers(watchCtx(s));
     try {
       await rescanLibrary(s.db, s.roots, "Podcasts");
@@ -64,13 +63,18 @@ describe("watch", () => {
     }
   });
 
-  it("a new top-level library folder emits libraries-changed", async () => {
-    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" }, enabled: ["Podcasts"] });
+  it("a new top-level library folder is auto-indexed and emits libraries-changed", async () => {
+    const s = await makeStackLite({ files: { "Podcasts/a.wav": "x" } });
     const w = startWatchers(watchCtx(s));
     try {
       const changed = waitForEvent(s, null, "libraries-changed");
-      await mkdir(join(s.roots.libraries, "New Library"), { recursive: true });
+      const indexed = waitForEvent(s, "New Library", "library-changed");
+      await writeWav(join(s.roots.libraries, "New Library/tone.wav"), 1);
       await changed;
+      await indexed;
+      expect(
+        s.db.query("SELECT path FROM files WHERE path = ?").get("New Library/tone.wav"),
+      ).toBeDefined();
     } finally {
       w.stop();
       await s.cleanup();
