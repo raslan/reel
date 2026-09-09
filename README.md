@@ -26,9 +26,7 @@ A ready-to-edit compose file is in the repo (`docker-compose.yml`). Edit the lib
 ```yaml
 services:
   reel:
-    build: .
-    ports:
-      - "8080:8080"
+    image: ghcr.io/raslan/reel:latest 
     volumes:
       # One tree at /libraries: its immediate subdirectories become the libraries.
       - /absolute/path/to/your/audio:/libraries:ro
