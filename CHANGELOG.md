@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/raslan/reel/compare/v1.0.0...v1.1.0) (2026-09-09)
+
+
+### Features
+
+* update docker install notes ([7c1d8b2](https://github.com/raslan/reel/commit/7c1d8b2815c2e6e6ddd4e1165b3b0c8c34efb9e6))
+
 ## 1.0.0 (2026-09-09)
 
 
