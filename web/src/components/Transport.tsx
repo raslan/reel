@@ -8,7 +8,7 @@ interface TransportProps {
 }
 
 export function Transport({ size = "bar" }: TransportProps) {
-  const { togglePlay, nextFile, prevFile, seekBy } = useAudio();
+  const { togglePlay, nextFile, prevFile, seekBy, canPrev, canNext } = useAudio();
   const { playing, current } = useAppState();
   const disabled = current === null;
   const ghost = "ghost-btn flex items-center justify-center rounded-full text-dim/70";
@@ -19,7 +19,7 @@ export function Transport({ size = "bar" }: TransportProps) {
       <button
         type="button"
         onClick={prevFile}
-        disabled={disabled}
+        disabled={disabled || !canPrev}
         className={cn(ghost, btn)}
         title="Previous in folder"
       >
@@ -63,7 +63,7 @@ export function Transport({ size = "bar" }: TransportProps) {
       <button
         type="button"
         onClick={nextFile}
-        disabled={disabled}
+        disabled={disabled || !canNext}
         className={cn(ghost, btn)}
         title="Next in folder"
       >

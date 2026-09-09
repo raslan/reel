@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { openEvents } from "../lib/events";
-import { librariesKey, peaksKey } from "../lib/keys";
+import { peaksKey } from "../lib/keys";
 
 /** SSE -> query invalidation: the client never polls for library changes. */
 export function useLibraryEvents() {
@@ -21,7 +21,6 @@ export function useLibraryEvents() {
           });
           void qc.invalidateQueries({ queryKey: ["search"] });
         } else if (name === "libraries-changed") {
-          void qc.invalidateQueries({ queryKey: librariesKey });
           void qc.invalidateQueries({ queryKey: ["folder"] });
           void qc.invalidateQueries({ queryKey: ["search"] });
         } else if (name === "peaks-ready" || name === "peaks-failed") {

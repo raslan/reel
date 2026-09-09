@@ -22,8 +22,8 @@ export function VirtualRows({ count, renderRow, keyOf }: VirtualRowsProps) {
     overscan: 10,
   });
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto">
-      <div ref={parentRef} className="relative pb-[150px] md:pb-[130px] px-1">
+    <div ref={scrollRef} className="h-full flex-1 overflow-y-auto">
+      <div ref={parentRef} className="relative h-full pb-[150px] md:pb-[130px] px-1">
         {virtualizer.getVirtualItems().map((vi) => (
           <div
             key={keyOf(vi.index)}

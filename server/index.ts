@@ -92,15 +92,13 @@ export function applyWalk(db: Database, library: string, walked: FileRow[]): Wal
   };
 }
 
-/** Candidates = subdirectories of the libraries root, plus the root itself (name "Library") when it directly holds audio files. */
+/** Subdirectories of the libraries root, sorted case-insensitively. */
 export async function candidateLibraries(roots: Roots): Promise<{ name: string; path: string }[]> {
   const entries = await readdir(roots.libraries, { withFileTypes: true });
-  const out: { name: string; path: string }[] = [];
-  if (entries.some((e) => e.isFile() && extname(e.name) in AUDIO_EXTS)) {
-    out.push({ name: "Library", path: "" });
-  }
-  for (const e of entries) if (e.isDirectory()) out.push({ name: e.name, path: e.name });
-  return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => ({ name: e.name, path: e.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
 /** Probe one file with ffprobe. Returns seconds, or null on any failure. */

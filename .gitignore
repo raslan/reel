@@ -17,6 +17,8 @@ CLAUDE.md
 .env
 .env.*
 
+docker-compose.override.yml
+
 # Local dev data (dev runs outside docker)
 data/
 libraries/

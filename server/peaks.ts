@@ -47,6 +47,12 @@ export class PeaksService {
     return getPeaks(this.db, path);
   }
 
+  /** Forget in-memory queue + failures; the peaks table is wiped by the caller. */
+  clear(): void {
+    this.queue.length = 0;
+    this.failed.clear();
+  }
+
   /** Stop accepting work and wait for in-flight jobs. */
   async stop(): Promise<void> {
     this.stopped = true;

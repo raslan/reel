@@ -93,7 +93,7 @@ describe("applyWalk", () => {
 });
 
 describe("candidateLibraries", () => {
-  test("subdirectories + root when it directly holds audio files", async () => {
+  test("subdirectories only — root audio files are not a candidate", async () => {
     const s = await makeStackLite({
       files: {
         "Podcasts/a.wav": "x",
@@ -104,7 +104,6 @@ describe("candidateLibraries", () => {
     try {
       expect(await candidateLibraries(s.roots)).toEqual([
         { name: "Field Recordings", path: "Field Recordings" },
-        { name: "Library", path: "" },
         { name: "Podcasts", path: "Podcasts" },
       ]);
     } finally {

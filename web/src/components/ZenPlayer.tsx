@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { Minus } from "lucide-react";
+import { X } from "lucide-react";
 import { useAudio } from "../hooks/useAudio";
 import { usePeaks } from "../hooks/usePeaks";
 import { fmt } from "../lib/format";
@@ -21,9 +21,9 @@ export function ZenPlayer() {
   if (!zen || current === null) return null;
 
   return (
-    <div className="fixed inset-0 z-40 bg-bg grain flex flex-col items-center justify-center px-5 md:px-10">
+    <div className="fixed inset-0 z-40 bg-bg flex flex-col items-center justify-center px-5 md:px-10">
       <div className="w-full max-w-[880px] flex flex-col items-center gap-6 md:gap-8">
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center justify-between">
           <DeckStatus />
           <button
             type="button"
@@ -31,7 +31,7 @@ export function ZenPlayer() {
             className="ghost-btn w-8 h-8 rounded-full flex items-center justify-center text-dim/70"
             title="Close (Esc)"
           >
-            <Minus className="w-4 h-4" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 

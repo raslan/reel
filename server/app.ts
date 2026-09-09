@@ -6,6 +6,7 @@ import { streamSSE } from "hono/streaming";
 import type { Roots } from "./config";
 import {
   addFavorite,
+  clearDb,
   countFilesByLibrary,
   favoritePaths,
   folderFiles,
@@ -151,12 +152,20 @@ export function createApp(ctx: AppCtx): Hono {
 
   app.post("/api/rescan", (c) => {
     void (async () => {
-      for (const lib of await candidateLibraries(roots)) {
-        const d = await ctx.rescan(lib.path);
-        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib.path });
+      const libs = ["", ...(await candidateLibraries(roots)).map((l) => l.path)];
+      for (const lib of libs) {
+        const d = await ctx.rescan(lib);
+        if (d.added + d.removed + d.changed > 0) bus.emit("library-changed", { path: lib });
       }
     })();
     return c.json({ status: "started" }, 202);
+  });
+
+  app.post("/api/clear", (c) => {
+    clearDb(db);
+    peaks.clear();
+    bus.emit("libraries-changed");
+    return c.json({ ok: true });
   });
 
   /* ---------- SSE ---------- */

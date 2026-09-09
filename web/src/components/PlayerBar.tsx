@@ -14,7 +14,7 @@ import { Waveform } from "./Waveform";
 export function PlayerBar() {
   const dispatch = useAppDispatch();
   const { current, playing, speed } = useAppState();
-  const { togglePlay, nextFile, prevFile, cycleSpeed } = useAudio();
+  const { togglePlay, nextFile, prevFile, cycleSpeed, canPrev, canNext } = useAudio();
   const peaksQuery = usePeaks(current?.path ?? null);
   const peaks = peaksQuery.data?.status === "ready" ? (peaksQuery.data.peaks ?? null) : null;
   const spd = speed === 1 ? "1×" : `${speed}×`;
@@ -90,7 +90,7 @@ export function PlayerBar() {
           <button
             type="button"
             onClick={prevFile}
-            disabled={current === null}
+            disabled={current === null || !canPrev}
             className="ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70"
             title="Previous in folder"
           >
@@ -115,7 +115,7 @@ export function PlayerBar() {
           <button
             type="button"
             onClick={nextFile}
-            disabled={current === null}
+            disabled={current === null || !canNext}
             className="ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70"
             title="Next in folder"
           >

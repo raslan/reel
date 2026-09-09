@@ -90,7 +90,7 @@ export function LibraryScreen() {
             />
           )
         ) : (
-          <div className="max-w-[920px] w-full mx-auto px-5 md:px-8 pb-2">
+          <div className="h-full max-w-[920px] w-full mx-auto px-5 md:px-8 pb-2">
             <VirtualRows
               count={rows.length}
               keyOf={(i) => {

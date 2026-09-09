@@ -1,0 +1,18 @@
+# Reel — example compose. Copy to docker-compose.yml and adjust paths.
+# The container needs only a read-only library mount + a writable data volume.
+services:
+  reel:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # One tree at /libraries: its immediate subdirectories become the libraries.
+      - /absolute/path/to/your/audio:/libraries:ro
+      # …or mount each library explicitly:
+      # - /absolute/path/to/podcasts:/libraries/Podcasts:ro
+      # - /absolute/path/to/field:/libraries/Field:ro
+      - reel-data:/data
+    restart: unless-stopped
+
+volumes:
+  reel-data:

@@ -1,4 +1,4 @@
-import type { FileEntry, FolderEntry, LibraryInfo } from "./library";
+import type { FileEntry, FolderEntry } from "./library";
 
 export interface ListResponse {
   folders: FolderEntry[];
@@ -12,10 +12,6 @@ export interface SearchResponse {
 
 export interface FavoritesResponse {
   paths: string[];
-}
-
-export interface LibrariesResponse {
-  libraries: LibraryInfo[];
 }
 
 export interface OkResponse {

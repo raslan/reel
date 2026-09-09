@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage, listFolder } from "../lib/api";
@@ -22,6 +22,8 @@ export interface AudioApi {
   cycleSpeed: () => void;
   setVolume: (v: number) => void;
   nudgeVolume: (d: number) => void;
+  canPrev: boolean;
+  canNext: boolean;
 }
 
 export const AudioCtx = createContext<AudioApi | null>(null);
@@ -36,6 +38,26 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
   const loadedPath = useRef<string | null>(null);
+
+  const folderPath = state.current?.folderPath;
+  // The current folder's file list (shared cache key) — whether next/prev
+  // have anywhere to go within the folder.
+  const folderQuery = useQuery({
+    queryKey: folderKey(folderPath ?? ""),
+    queryFn: () => listFolder(folderPath as string),
+    enabled: folderPath !== null,
+  });
+  const deadPaths = useMemo(() => new Set(state.deadPaths), [state.deadPaths]);
+  const { canPrev, canNext } = useMemo(() => {
+    if (state.current === null || folderQuery.data === undefined) {
+      return { canPrev: false, canNext: false };
+    }
+    const files = sortFiles(folderQuery.data.files, state.sort);
+    return {
+      canPrev: stepIn(files, state.current.path, -1, deadPaths) !== null,
+      canNext: stepIn(files, state.current.path, 1, deadPaths) !== null,
+    };
+  }, [state.current, folderQuery.data, state.sort, deadPaths]);
 
   // Load a new file whenever the current file changes.
   useEffect(() => {
@@ -60,9 +82,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   // Advance within the current folder, skipping dead files.
   const advance = useCallback(
-    async (dir: 1 | -1) => {
+    async (dir: 1 | -1): Promise<boolean> => {
       const cur = stateRef.current.current;
-      if (cur === null) return;
+      if (cur === null) return false;
       let files = qc.getQueryData<ListResponse>(folderKey(cur.folderPath))?.files;
       if (files === undefined) {
         try {
@@ -73,7 +95,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
           files = data.files;
         } catch (err) {
           toast.error(errorMessage(err));
-          return;
+          return false;
         }
       }
       const next = stepIn(
@@ -82,10 +104,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
         dir,
         new Set(stateRef.current.deadPaths),
       );
-      if (next === null) {
-        dispatch({ type: "setPlaying", playing: false });
-        return;
-      }
+      if (next === null) return false;
       dispatch({
         type: "playFile",
         file: {
@@ -95,6 +114,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
           duration: next.duration,
         },
       });
+      return true;
     },
     [qc, dispatch],
   );
@@ -118,7 +138,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
         }
       }),
       engine.on("ended", () => {
-        void advanceRef.current(1);
+        void advanceRef.current(1).then((advanced) => {
+          if (!advanced) dispatch({ type: "setPlaying", playing: false });
+        });
       }),
     ];
     return () => {
@@ -160,8 +182,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       cycleSpeed: () => dispatch({ type: "cycleSpeed" }),
       setVolume: (v) => dispatch({ type: "setVolume", volume: v }),
       nudgeVolume: (d) => dispatch({ type: "setVolume", volume: stateRef.current.volume + d }),
+      canPrev,
+      canNext,
     }),
-    [engine, dispatch, advance],
+    [engine, dispatch, advance, canPrev, canNext],
   );
 
   useEffect(

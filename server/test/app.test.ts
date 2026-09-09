@@ -101,14 +101,15 @@ describe("GET /api/list", () => {
   test("returns folders (live) and files (indexed) for a folder", async () => {
     const s = await makeStack({
       files: {
+        "loose.mp3": "x",
         "Podcasts/b.mp3": "x",
         "Podcasts/Sub/c.wav": "x",
-        "Podcasts/notes.txt": "x",
       },
     });
     try {
       await writeWav(join(s.roots.libraries, "Podcasts/a.wav"), 3000, 440);
       await s.rescan("Podcasts");
+      await s.rescan("");
       const res = await fetch(`${s.base}/api/list?path=Podcasts`);
       expect(res.status).toBe(200);
       const body = await json<ListBody>(res);
@@ -123,7 +124,8 @@ describe("GET /api/list", () => {
       const sub = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts/Sub`));
       expect(sub.files.map((f) => f.name)).toEqual(["c.wav"]);
       const root = await json<ListBody>(await fetch(`${s.base}/api/list`));
-      expect(root.files).toEqual([]);
+      expect(root.folders).toEqual([{ name: "Podcasts", path: "Podcasts" }]);
+      expect(root.files.map((f) => f.name)).toEqual(["loose.mp3"]);
     } finally {
       await s.cleanup();
     }
@@ -263,18 +265,64 @@ describe("GET /api/peaks", () => {
 });
 
 describe("POST /api/rescan", () => {
-  test("returns 202 and picks up new files", async () => {
+  test("returns 202 and picks up new files, including root-level", async () => {
     const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
     try {
       await s.rescan("Podcasts");
       await Bun.write(join(s.roots.libraries, "Podcasts/b.wav"), "x");
+      await Bun.write(join(s.roots.libraries, "loose.wav"), "x");
       const changed = waitForEvent(s, "Podcasts", "library-changed");
+      const rootChanged = waitForEvent(s, "", "library-changed");
       const res = await fetch(`${s.base}/api/rescan`, { method: "POST" });
       expect(res.status).toBe(202);
       expect(await res.json()).toEqual({ status: "started" });
       await changed;
+      await rootChanged;
       const list = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`));
       expect(list.files.map((f) => f.path)).toEqual(["Podcasts/a.wav", "Podcasts/b.wav"]);
+      const root = await json<ListBody>(await fetch(`${s.base}/api/list`));
+      expect(root.folders).toEqual([{ name: "Podcasts", path: "Podcasts" }]);
+      expect(root.files.map((f) => f.name)).toEqual(["loose.wav"]);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("POST /api/clear", () => {
+  test("wipes index, favorites, and peaks; a rescan rebuilds the index", async () => {
+    const s = await makeStack({ files: { "Podcasts/a.wav": "x" } });
+    try {
+      await s.rescan("Podcasts");
+      await fetch(`${s.base}/api/favorites`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: "Podcasts/a.wav" }),
+      });
+      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({
+        paths: ["Podcasts/a.wav"],
+      });
+
+      const sse = await readSSE(s.base, (event) => event === "libraries-changed");
+      await sse.connected;
+      const res = await fetch(`${s.base}/api/clear`, { method: "POST" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      await sse.until;
+
+      expect(await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`))).toEqual({
+        folders: [],
+        files: [],
+      });
+      expect(await json<FavoritesBody>(await fetch(`${s.base}/api/favorites`))).toEqual({
+        paths: [],
+      });
+
+      const changed = waitForEvent(s, "Podcasts", "library-changed");
+      await fetch(`${s.base}/api/rescan`, { method: "POST" });
+      await changed;
+      const rebuilt = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`));
+      expect(rebuilt.files.map((f) => f.path)).toEqual(["Podcasts/a.wav"]);
     } finally {
       await s.cleanup();
     }

@@ -205,3 +205,15 @@ export function deleteStalePeaks(db: Database): void {
     )
   `);
 }
+
+/**
+ * Wipe all indexed data — files, favorites, peaks — as if the library never
+ * existed. The DB file itself stays on disk; a rescan rebuilds the index.
+ */
+export function clearDb(db: Database): void {
+  db.transaction(() => {
+    db.run("DELETE FROM files");
+    db.run("DELETE FROM favorites");
+    db.run("DELETE FROM peaks");
+  })();
+}

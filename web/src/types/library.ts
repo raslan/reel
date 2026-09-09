@@ -1,9 +1,3 @@
-export interface LibraryInfo {
-  name: string;
-  path: string;
-  audioFiles: number;
-}
-
 export interface FolderEntry {
   name: string;
   path: string;

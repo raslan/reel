@@ -61,7 +61,7 @@ export function SearchScreen() {
             />
           )
         ) : (
-          <div className="max-w-[920px] w-full mx-auto px-5 md:px-8 pb-2">
+          <div className="h-full max-w-[920px] w-full mx-auto px-5 md:px-8 pb-2">
             <VirtualRows
               count={files.length}
               keyOf={(i) => `p:${files[i]?.path ?? ""}`}

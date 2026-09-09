@@ -7,7 +7,6 @@ import { openDb } from "./db";
 import { createBus } from "./events";
 import { applyWalk, candidateLibraries, rescanLibrary, runDurationPass, walkLibrary } from "./index";
 import { PeaksService } from "./peaks";
-import { startWatchers, type WatcherHandle } from "./watch";
 
 /**
  * Serve the file under `prefix` that lives inside `root`.
@@ -53,12 +52,11 @@ export async function startServer(opts: ServerOpts = {}): Promise<RunningServer>
   const bus = createBus();
   const peaks = new PeaksService(db, roots, bus);
   const rescan = (lib: string) => rescanLibrary(db, roots, lib);
-  const watchers: WatcherHandle = startWatchers({ roots, bus, rescan });
   const app = createApp({ db, roots, bus, peaks, rescan });
 
-  // Startup: index every library (fast walk; durations filled in later).
+  // Startup: index root-level files + every library (fast walk; durations filled in later).
+  applyWalk(db, "", await walkLibrary(roots, ""));
   for (const lib of await candidateLibraries(roots)) {
-    if (lib.path === "") continue;
     applyWalk(db, lib.path, await walkLibrary(roots, lib.path));
   }
 
@@ -92,7 +90,6 @@ export async function startServer(opts: ServerOpts = {}): Promise<RunningServer>
   const stop = async (): Promise<void> => {
     if (stopping) return;
     stopping = true;
-    watchers.stop();
     server.stop(true);
     await durationPass; // no db writes after this
     await peaks.stop();
