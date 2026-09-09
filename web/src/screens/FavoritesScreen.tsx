@@ -38,13 +38,13 @@ export function FavoritesScreen() {
           Files you starred, across all libraries.
         </p>
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 h-full min-h-0">
         {favorites.isPending ? (
           <SkeletonRows count={5} />
         ) : sorted.length === 0 ? (
           <EmptyState icon={Star} title="No favorites yet" hint="Star a file to pin it here." />
         ) : (
-          <div className="max-w-[920px] w-full mx-auto px-5 md:px-8 pb-2">
+          <div className="max-w-[920px] h-full w-full mx-auto px-5 md:px-8 pb-2">
             <VirtualRows
               count={sorted.length}
               keyOf={(i) => `p:${sorted[i]?.path ?? ""}`}
