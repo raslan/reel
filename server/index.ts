@@ -22,13 +22,24 @@ const AUDIO_EXTS: Record<string, true> = {
   ".opus": true,
 };
 
+/** Stat a regular file; null if it's gone, dangling, or not a file (e.g. a directory named `x.mp3`). */
+async function statFile(abs: string) {
+  try {
+    const st = await stat(abs);
+    return st.isFile() ? st : null;
+  } catch {
+    return null; // vanished between listing and stat — the next rescan will settle it
+  }
+}
+
 /** Walk one library. library "" = files directly under the libraries root (no recursion). */
 export async function walkLibrary(roots: Roots, library: string): Promise<FileRow[]> {
   const rows: FileRow[] = [];
   if (library === "") {
     for (const entry of await readdir(roots.libraries)) {
       if (!(extname(entry) in AUDIO_EXTS)) continue;
-      const st = await stat(join(roots.libraries, entry));
+      const st = await statFile(join(roots.libraries, entry));
+      if (st === null) continue;
       rows.push({
         path: entry,
         library: "",
@@ -52,7 +63,8 @@ export async function walkLibrary(roots: Roots, library: string): Promise<FileRo
   const glob = new Glob("**/*");
   for await (const abs of glob.scan({ cwd: base, absolute: true, onlyFiles: true })) {
     if (!(extname(abs) in AUDIO_EXTS)) continue;
-    const st = await stat(abs);
+    const st = await statFile(abs);
+    if (st === null) continue;
     const rel = relative(roots.libraries, abs);
     rows.push({
       path: rel,
@@ -73,7 +85,7 @@ export interface WalkDiff {
   changed: number;
 }
 
-/** Replace the index for `library` with `walked`; keep durations for files whose mtime is unchanged. */
+/** Replace the index for `library` with `walked`; keep probed data for files whose mtime is unchanged. */
 export function applyWalk(db: Database, library: string, walked: FileRow[]): WalkDiff {
   const old = new Map(filesByLibrary(db, library).map((r) => [r.path, r]));
   const merged = walked.map((r) => {
@@ -101,7 +113,7 @@ export async function candidateLibraries(roots: Roots): Promise<{ name: string; 
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-/** Probe one file with ffprobe. Returns seconds, or null on any failure. */
+/** Duration in seconds via ffprobe. Returns null on any failure. */
 export async function probeDuration(absPath: string): Promise<number | null> {
   try {
     const proc = Bun.spawn(
@@ -120,8 +132,8 @@ export async function probeDuration(absPath: string): Promise<number | null> {
     const out = await new Response(proc.stdout).text();
     const code = await proc.exited;
     if (code !== 0) return null;
-    const d = Number.parseFloat(out.trim());
-    return Number.isFinite(d) ? d : null;
+    const duration = Number.parseFloat(out.trim());
+    return Number.isFinite(duration) ? duration : null;
   } catch {
     return null;
   }
@@ -134,13 +146,14 @@ export interface DurationPassResult {
   libraries: string[];
 }
 
-/** Probe every file with NULL duration (bounded concurrency). */
+/** Probe every file with NULL duration, optionally within one library (bounded concurrency). */
 export async function runDurationPass(
   db: Database,
   roots: Roots,
   concurrency = 4,
+  library?: string,
 ): Promise<DurationPassResult> {
-  const pending = filesWithNullDuration(db);
+  const pending = filesWithNullDuration(db, library);
   let i = 0;
   let count = 0;
   const touched = new Set<string>();
@@ -148,9 +161,9 @@ export async function runDurationPass(
     while (true) {
       const row = pending[i++];
       if (row === undefined) break;
-      const d = await probeDuration(join(roots.libraries, row.path));
-      if (d !== null) {
-        setFileDuration(db, row.path, d);
+      const duration = await probeDuration(join(roots.libraries, row.path));
+      if (duration !== null) {
+        setFileDuration(db, row.path, duration);
         touched.add(row.library);
         count++;
       }
@@ -169,6 +182,6 @@ export async function rescanLibrary(
 ): Promise<WalkDiff> {
   const walked = await walkLibrary(roots, library);
   const diff = applyWalk(db, library, walked);
-  await runDurationPass(db, roots);
+  await runDurationPass(db, roots, 4, library);
   return diff;
 }

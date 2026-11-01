@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDb, replaceLibraryFiles, searchFiles } from "../server/db";
+import { openDb, replaceLibraryFiles, searchFiles } from "../db";
 
 let dir: string;
 let db: ReturnType<typeof openDb>;

@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Server } from "bun";
-import type { Hono } from "hono";
 import { createApp } from "../app";
 import type { Roots } from "../config";
 import { openDb } from "../db";
 import { createBus, type EventBus } from "../events";
 import { rescanLibrary, type WalkDiff } from "../index";
 import { PeaksService } from "../peaks";
+import { RescanService } from "../rescan";
 
 /** Temp dir with cleanup. */
 export async function makeTempDir(
@@ -98,10 +98,11 @@ export async function makeStackLite(opts?: {
 }
 
 export interface Stack extends StackLite {
-  app: Hono;
   server: Server<unknown>;
   base: string;
+  /** Rescan one library directly (bypasses the HTTP job; for arranging test data). */
   rescan: (library: string) => Promise<WalkDiff>;
+  rescanService: RescanService;
 }
 
 /* ---------- API response shapes (mirror the JSON contracts) ---------- */
@@ -117,6 +118,7 @@ interface FileEntry {
   path: string;
   duration: number | null;
   size: number;
+  mtime: number;
 }
 
 export interface SearchBody {
@@ -125,7 +127,7 @@ export interface SearchBody {
 }
 
 export interface FavoritesBody {
-  paths: string[];
+  files: FileEntry[];
 }
 export interface ListBody {
   folders: { name: string; path: string }[];
@@ -141,28 +143,41 @@ export async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** POST JSON the way the real client does (the API rejects writes without a JSON content type). */
+export function postJson(base: string, path: string, body?: unknown): Promise<Response> {
+  return fetch(`${base}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 /** Full HTTP stack: Hono app behind Bun.serve on a random port. */
 export async function makeStack(opts?: {
   files?: Record<string, string>;
+  heartbeatMs?: number;
 }): Promise<Stack> {
   const lite = await makeStackLite(opts);
   const rescan = (lib: string) => rescanLibrary(lite.db, lite.roots, lib);
+  const rescanService = new RescanService(lite.db, lite.roots, lite.bus);
   const app = createApp({
     db: lite.db,
     roots: lite.roots,
     bus: lite.bus,
     peaks: lite.peaks,
-    rescan,
+    rescan: rescanService,
+    heartbeatMs: opts?.heartbeatMs,
   });
   const server = Bun.serve({ port: 0, fetch: app.fetch });
   return {
     ...lite,
-    app,
     server,
     base: `http://127.0.0.1:${server.port}`,
     rescan,
+    rescanService,
     cleanup: async () => {
       server.stop(true);
+      await rescanService.whenIdle();
       await lite.cleanup();
     },
   };

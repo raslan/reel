@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, rm, utimes } from "node:fs/promises";
+import { mkdir, rm, symlink, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import {
   applyWalk,
@@ -55,6 +55,18 @@ describe("walkLibrary", () => {
       await s.cleanup();
     }
   });
+
+  test("root walk skips directories named like audio and entries that vanish or dangle", async () => {
+    const s = await makeStackLite({ files: { "good.wav": "x" } });
+    try {
+      await mkdir(join(s.roots.libraries, "folder.mp3")); // a directory, not a file
+      await symlink("/nonexistent/target.mp3", join(s.roots.libraries, "dangling.mp3"));
+      const rows = await walkLibrary(s.roots, "");
+      expect(rows.map((r) => r.path)).toEqual(["good.wav"]);
+    } finally {
+      await s.cleanup();
+    }
+  });
 });
 
 describe("applyWalk", () => {
@@ -72,16 +84,16 @@ describe("applyWalk", () => {
       const kept = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as {
         duration: number | null;
       };
-      expect(kept.duration).toBe(0.5);
+      expect(kept).toEqual({ duration: 0.5 });
 
       await writeWav(p, 0.7);
       await utimes(p, 1_700_000_900, 1_700_000_900); // force a distinct mtime
       diff = applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
       expect(diff.changed).toBe(1);
-      const reset = s.db
-        .query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'")
-        .get() as { duration: number | null };
-      expect(reset.duration).toBeNull();
+      const reset = s.db.query("SELECT duration FROM files WHERE path = 'Podcasts/a.wav'").get() as {
+        duration: number | null;
+      };
+      expect(reset).toEqual({ duration: null }); // changed file is re-probed
 
       await rm(p);
       diff = applyWalk(s.db, "Podcasts", await walkLibrary(s.roots, "Podcasts"));
@@ -113,12 +125,12 @@ describe("candidateLibraries", () => {
 });
 
 describe("probeDuration", () => {
-  test("returns duration for a valid wav, null for a missing file", async () => {
+  test("returns seconds for a real file, null for a missing one", async () => {
     const { dir, cleanup } = await makeTempDir("reel-probe-");
     try {
-      const p = join(dir, "a.wav");
-      await writeWav(p, 1);
-      expect(await probeDuration(p)).toBeCloseTo(1, 1);
+      const wav = join(dir, "a.wav");
+      await writeWav(wav, 1);
+      expect(await probeDuration(wav)).toBeCloseTo(1, 1);
       expect(await probeDuration(join(dir, "nope.wav"))).toBeNull();
     } finally {
       await cleanup();

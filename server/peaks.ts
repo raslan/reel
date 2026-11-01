@@ -3,22 +3,77 @@ import { join } from "node:path";
 import type { Roots } from "./config";
 import { getFile, getPeaks, setPeaks } from "./db";
 import type { EventBus } from "./events";
+import { errFields, log } from "./log";
 
 const PEAK_BUCKETS = 1024;
+const DEFAULT_DECODE_TIMEOUT_MS = 5 * 60_000;
 
 export type PeaksState = "ready" | "pending" | "failed";
+
+/**
+ * Streaming max-per-bucket over little-endian float32 mono samples. Chunks may
+ * split a sample anywhere (pipes don't respect 4-byte boundaries) and may start
+ * at any byte offset, so leftover bytes are carried into the next `push`.
+ */
+export class PeakBuckets {
+  private readonly max = new Float32Array(PEAK_BUCKETS);
+  private carry = new Uint8Array(0);
+  private idx = 0;
+
+  constructor(private readonly samplesPerBucket: number) {}
+
+  push(chunk: Uint8Array): void {
+    let bytes = chunk;
+    if (this.carry.length > 0) {
+      bytes = new Uint8Array(this.carry.length + chunk.length);
+      bytes.set(this.carry);
+      bytes.set(chunk, this.carry.length);
+    }
+    const whole = bytes.byteLength - (bytes.byteLength % 4);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, whole);
+    for (let o = 0; o < whole; o += 4) {
+      const b = Math.min(PEAK_BUCKETS - 1, Math.floor(this.idx / this.samplesPerBucket));
+      const a = Math.abs(view.getFloat32(o, true));
+      if (a > this.max[b]!) this.max[b] = a;
+      this.idx++;
+    }
+    this.carry = bytes.slice(whole);
+  }
+
+  /** Samples seen so far. */
+  get count(): number {
+    return this.idx;
+  }
+
+  /** 1024 float32 values normalised to 0.08–0.96; all-silence is a flat 0.08. */
+  normalized(): Uint8Array {
+    let peak = 0;
+    for (let i = 0; i < PEAK_BUCKETS; i++) if (this.max[i]! > peak) peak = this.max[i]!;
+    const out = new Float32Array(PEAK_BUCKETS);
+    for (let i = 0; i < PEAK_BUCKETS; i++) {
+      out[i] = peak === 0 ? 0.08 : 0.08 + 0.88 * (this.max[i]! / peak);
+    }
+    return new Uint8Array(out.buffer);
+  }
+}
 
 export class PeaksService {
   private queue: string[] = [];
   private running = new Set<string>();
   private failed = new Map<string, number>(); // path -> mtime at failure
   private stopped = false;
+  private readonly decodeTimeoutMs: number;
+  private readonly ffmpegBin: string;
 
   constructor(
     private db: Database,
     private roots: Roots,
     private bus: EventBus,
-  ) {}
+    opts: { decodeTimeoutMs?: number; ffmpegBin?: string } = {},
+  ) {
+    this.decodeTimeoutMs = opts.decodeTimeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS;
+    this.ffmpegBin = opts.ffmpegBin ?? "ffmpeg";
+  }
 
   /**
    * State for (path, mtime):
@@ -78,22 +133,25 @@ export class PeaksService {
   private async runJob(path: string, mtime: number): Promise<void> {
     try {
       const peaks = await this.decode(path);
+      // The index may have been cleared or the file changed while we decoded.
+      if (getFile(this.db, path)?.mtime !== mtime) return;
       setPeaks(this.db, path, mtime, peaks);
       this.bus.emit("peaks-ready", { path });
-    } catch {
+    } catch (err) {
+      log("warn", "peaks decode failed", { path, ...errFields(err) });
       this.failed.set(path, mtime);
       this.bus.emit("peaks-failed", { path });
     }
   }
 
-  /** Decode the file to 1024 normalized peak values (0.08–0.96). Throws on failure. */
+  /** Decode the file to 1024 normalized peak values (0.08–0.96). Throws on failure or timeout. */
   private async decode(path: string): Promise<Uint8Array> {
     const abs = join(this.roots.libraries, path);
     const duration = getFile(this.db, path)?.duration ?? null;
 
     const proc = Bun.spawn(
       [
-        "ffmpeg",
+        this.ffmpegBin,
         "-hide_banner",
         "-loglevel",
         "error",
@@ -111,51 +169,43 @@ export class PeaksService {
       ],
       { stdout: "pipe", stderr: "pipe" },
     );
+    // A wedged decoder must not stall the (single-lane) queue forever.
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+    }, this.decodeTimeoutMs);
+    const stderr = new Response(proc.stderr).text(); // drain so ffmpeg can't block on a full pipe
 
-    const maxAbs = new Float32Array(PEAK_BUCKETS);
-    if (duration && duration > 0) {
-      // Duration known → bucket boundaries known up front; stream in O(1) memory.
-      const samplesPerBucket = (duration * 1000) / PEAK_BUCKETS;
-      let idx = 0;
-      const reader = proc.stdout.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = new Float32Array(
-          value.buffer,
-          value.byteOffset,
-          Math.floor(value.byteLength / 4),
-        );
-        for (let i = 0; i < chunk.length; i++) {
-          const b = Math.min(PEAK_BUCKETS - 1, Math.floor(idx / samplesPerBucket));
-          const a = Math.abs(chunk[i]!);
-          if (a > maxAbs[b]!) maxAbs[b] = a;
-          idx++;
+    try {
+      let buckets: PeakBuckets;
+      if (duration && duration > 0) {
+        // Duration known → bucket boundaries known up front; stream in O(1) memory.
+        buckets = new PeakBuckets((duration * 1000) / PEAK_BUCKETS);
+        const reader = proc.stdout.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buckets.push(value);
         }
+      } else {
+        // No duration → buffer the stream, bucket evenly.
+        const all = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
+        buckets = new PeakBuckets(Math.max(1, Math.floor(all.length / 4)) / PEAK_BUCKETS);
+        buckets.push(all);
       }
-    } else {
-      // No duration → buffer the stream, bucket evenly.
-      const buf = await new Response(proc.stdout).arrayBuffer();
-      const samples = new Float32Array(buf);
-      if (samples.length === 0) throw new Error("no samples");
-      const per = samples.length / PEAK_BUCKETS;
-      for (let i = 0; i < samples.length; i++) {
-        const b = Math.min(PEAK_BUCKETS - 1, Math.floor(i / per));
-        const a = Math.abs(samples[i]!);
-        if (a > maxAbs[b]!) maxAbs[b] = a;
+
+      // Judge the outcome in order of how informative the error is.
+      const code = await proc.exited;
+      if (timedOut) throw new Error(`ffmpeg timed out after ${this.decodeTimeoutMs}ms`);
+      if (code !== 0) {
+        throw new Error(`ffmpeg exited ${code}: ${(await stderr).trim().slice(0, 300)}`);
       }
+      if (buckets.count === 0) throw new Error("ffmpeg produced no samples");
+      return buckets.normalized();
+    } finally {
+      clearTimeout(timer);
+      if (proc.exitCode === null) proc.kill();
     }
-
-    const code = await proc.exited;
-    if (code !== 0) throw new Error(`ffmpeg exited ${code}`);
-
-    // Normalize to 0.08–0.96; all-silence → flat 0.08.
-    let peak = 0;
-    for (let i = 0; i < PEAK_BUCKETS; i++) if (maxAbs[i]! > peak) peak = maxAbs[i]!;
-    const out = new Float32Array(PEAK_BUCKETS);
-    for (let i = 0; i < PEAK_BUCKETS; i++) {
-      out[i] = peak === 0 ? 0.08 : 0.08 + 0.88 * (maxAbs[i]! / peak);
-    }
-    return new Uint8Array(out.buffer);
   }
 }

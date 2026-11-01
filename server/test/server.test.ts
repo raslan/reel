@@ -44,7 +44,11 @@ describe("server composition", () => {
       for (let i = 0; i < big.length; i++) big[i] = i % 251;
       await Bun.write(join(lib, "Podcasts/big.wav"), big);
 
-      const { server, stop } = await startServer({ roots: { libraries: lib, data }, port: 0 });
+      const { server, stop, indexed } = await startServer({
+        roots: { libraries: lib, data },
+        port: 0,
+      });
+      await indexed;
       const base = `http://127.0.0.1:${server.port}`;
 
       const full = await fetch(`${base}/audio/Podcasts/big.wav`);
@@ -77,6 +81,104 @@ describe("server composition", () => {
         refused = true;
       }
       expect(refused).toBe(true);
+    } finally {
+      await baseDir.cleanup();
+    }
+  });
+
+  test("serves only indexed audio, not other files under the libraries root", async () => {
+    const baseDir = await makeTempDir("reel-srv-");
+    const lib = join(baseDir.dir, "lib");
+    const data = join(baseDir.dir, "data");
+    try {
+      await mkdir(join(lib, "Podcasts"), { recursive: true });
+      await mkdir(data, { recursive: true });
+      await Bun.write(join(lib, "Podcasts/a.wav"), "audio");
+      await Bun.write(join(lib, "Podcasts/notes.txt"), "private notes");
+      await Bun.write(join(lib, "Podcasts/.hidden.wav"), "dot file");
+
+      const { server, stop, indexed } = await startServer({
+        roots: { libraries: lib, data },
+        port: 0,
+        watch: false, // the file added below must stay unindexed
+      });
+      await indexed;
+      const base = `http://127.0.0.1:${server.port}`;
+      expect((await fetch(`${base}/audio/Podcasts/a.wav`)).status).toBe(200);
+      const notes = await fetch(`${base}/audio/Podcasts/notes.txt`);
+      expect(notes.status).toBe(404);
+      expect(await notes.text()).not.toContain("private notes");
+      expect((await fetch(`${base}/audio/Podcasts/.hidden.wav`)).status).toBe(404);
+
+      // A new file isn't playable until it's been indexed.
+      await Bun.write(join(lib, "Podcasts/new.wav"), "audio");
+      expect((await fetch(`${base}/audio/Podcasts/new.wav`)).status).toBe(404);
+      await stop();
+    } finally {
+      await baseDir.cleanup();
+    }
+  });
+
+  test("serves the install manifest and icons from the web root, and nothing else there", async () => {
+    const baseDir = await makeTempDir("reel-srv-");
+    const pub = join(baseDir.dir, "public");
+    try {
+      await mkdir(join(baseDir.dir, "lib"), { recursive: true });
+      await mkdir(pub, { recursive: true });
+      await mkdir(join(baseDir.dir, "data"), { recursive: true });
+      await Bun.write(join(pub, "manifest.webmanifest"), '{"name":"Reel"}');
+      await Bun.write(join(pub, "icon.svg"), "<svg/>");
+      await Bun.write(join(pub, "favicon.ico"), "ico");
+      await Bun.write(join(pub, "private.txt"), "not a root file");
+
+      const { server, stop } = await startServer({
+        roots: { libraries: join(baseDir.dir, "lib"), data: join(baseDir.dir, "data") },
+        port: 0,
+        publicDir: pub,
+        watch: false,
+      });
+      const base = `http://127.0.0.1:${server.port}`;
+      const manifest = await fetch(`${base}/manifest.webmanifest`);
+      expect(manifest.status).toBe(200);
+      expect(manifest.headers.get("content-type")).toContain("json");
+      expect(await manifest.json()).toEqual({ name: "Reel" });
+      expect((await fetch(`${base}/icon.svg`)).headers.get("content-type")).toContain("svg");
+      expect((await fetch(`${base}/favicon.ico`)).status).toBe(200);
+      expect((await fetch(`${base}/icon-512.png`)).status).toBe(404); // listed, but not built here
+      expect((await fetch(`${base}/private.txt`)).status).toBe(404);
+      await stop();
+    } finally {
+      await baseDir.cleanup();
+    }
+  });
+
+  test("the event stream survives longer than the idle timeout thanks to heartbeats", async () => {
+    const baseDir = await makeTempDir("reel-srv-");
+    try {
+      const lib = join(baseDir.dir, "lib");
+      await mkdir(lib, { recursive: true });
+      await mkdir(join(baseDir.dir, "data"), { recursive: true });
+      const { server, stop, indexed } = await startServer({
+        roots: { libraries: lib, data: join(baseDir.dir, "data") },
+        port: 0,
+        publicDir: join(baseDir.dir, "public"),
+        idleTimeoutS: 1,
+        heartbeatMs: 300,
+      });
+      await indexed;
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/events`);
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
+      const t0 = performance.now();
+      while (performance.now() - t0 < 2500) {
+        const { done, value } = await reader.read();
+        expect(done).toBe(false); // would be true if the server had cut the stream
+        text += decoder.decode(value, { stream: true });
+      }
+      expect(text.match(/: hb/g)?.length).toBeGreaterThanOrEqual(3);
+      await reader.cancel();
+      await stop();
     } finally {
       await baseDir.cleanup();
     }

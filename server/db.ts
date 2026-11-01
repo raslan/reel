@@ -14,6 +14,9 @@ export interface FileRow {
   duration: number | null;
 }
 
+/** Column list shared by every query that returns a FileRow. */
+const COLS = "path, library, folder, name, size, mtime, duration";
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS files (
   path     TEXT PRIMARY KEY,
@@ -49,9 +52,7 @@ export function openDb(path: string): Database {
 /* ---------- files ---------- */
 
 export function upsertFiles(db: Database, rows: FileRow[]): void {
-  const ins = db.prepare(
-    "INSERT OR REPLACE INTO files (path, library, folder, name, size, mtime, duration) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  );
+  const ins = db.prepare(`INSERT OR REPLACE INTO files (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?)`);
   db.transaction((all: FileRow[]) => {
     for (const r of all) ins.run(r.path, r.library, r.folder, r.name, r.size, r.mtime, r.duration);
   })(rows);
@@ -83,15 +84,13 @@ export function replaceLibraryFiles(db: Database, library: string, merged: FileR
 
 export function filesByLibrary(db: Database, library: string): FileRow[] {
   return db
-    .query("SELECT path, library, folder, name, size, mtime, duration FROM files WHERE library = ?")
+    .query(`SELECT ${COLS} FROM files WHERE library = ?`)
     .all(library) as FileRow[];
 }
 
 export function folderFiles(db: Database, folder: string): FileRow[] {
   return db
-    .query(
-      "SELECT path, library, folder, name, size, mtime, duration FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE",
-    )
+    .query(`SELECT ${COLS} FROM files WHERE folder = ? ORDER BY name COLLATE NOCASE`)
     .all(folder) as FileRow[];
 }
 
@@ -111,57 +110,95 @@ export function getFile(
   return row ?? null;
 }
 
-/** All indexed files that still have no duration. */
-export function filesWithNullDuration(db: Database): { path: string; library: string }[] {
-  return db.query("SELECT path, library FROM files WHERE duration IS NULL").all() as {
-    path: string;
-    library: string;
-  }[];
+/** Distinct library names present in the index ("" = root-level files). */
+export function indexedLibraries(db: Database): string[] {
+  return (db.query("SELECT DISTINCT library FROM files").all() as { library: string }[]).map(
+    (r) => r.library,
+  );
 }
 
-/** Set a file's duration in seconds. */
+/**
+ * Immediate subfolders of `parent` that contain audio at any depth, sorted
+ * case-insensitively. `parent` must be a non-empty folder path.
+ */
+export function childFolders(db: Database, parent: string): { name: string; path: string }[] {
+  const rows = db
+    .query("SELECT DISTINCT folder FROM files WHERE folder LIKE ? ESCAPE '\\'")
+    .all(`${escapeLike(parent)}/%`) as { folder: string }[];
+  const names = new Set<string>();
+  for (const { folder } of rows) {
+    const name = folder.slice(parent.length + 1).split("/")[0];
+    if (name) names.add(name);
+  }
+  return [...names]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((name) => ({ name, path: `${parent}/${name}` }));
+}
+
+/** Indexed files that still have no duration, optionally limited to one library. */
+export function filesWithNullDuration(
+  db: Database,
+  library?: string,
+): { path: string; library: string }[] {
+  const sql = "SELECT path, library FROM files WHERE duration IS NULL";
+  return (
+    library === undefined
+      ? db.query(sql).all()
+      : db.query(`${sql} AND library = ?`).all(library)
+  ) as { path: string; library: string }[];
+}
+
+/** Record a file's length in seconds. */
 export function setFileDuration(db: Database, path: string, duration: number): void {
   db.prepare("UPDATE files SET duration = ? WHERE path = ?").run(duration, path);
 }
 
-/**
- * Case-insensitive filename substring search, unbounded. `q` wildcards are
- * escaped. Optional `folder` restricts matches to that folder and its
- * subtrees (folder paths are relative to the library root).
- */
-export function searchFiles(
-  db: Database,
-  q: string,
-  folder?: string,
-): FileRow[] {
-  const params: (string | number)[] = [];
-  let sql = "SELECT path, library, folder, name, size, mtime, duration FROM files";
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+
+function searchWhere(q: string, folder?: string): { where: string; params: string[] } {
+  const params: string[] = [];
   const where: string[] = [];
   if (q) {
     where.push("name LIKE ? ESCAPE '\\'");
-    params.push(`%${q.replace(/[\\%_]/g, (m) => "\\" + m)}%`);
+    params.push(`%${escapeLike(q)}%`);
   }
   if (folder) {
-    const esc = folder.replace(/[\\%_]/g, (m) => "\\" + m);
     where.push("(folder = ? OR folder LIKE ? ESCAPE '\\')");
-    params.push(folder, `${esc}/%`);
+    params.push(folder, `${escapeLike(folder)}/%`);
   }
-  if (where.length > 0) sql += ` WHERE ${where.join(" AND ")}`;
-  sql += " ORDER BY name COLLATE NOCASE";
-  return db.query(sql).all(...params) as FileRow[];
+  return { where: where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "", params };
+}
+
+/**
+ * Case-insensitive filename substring search, best `limit` matches by name.
+ * `q` wildcards are escaped. Optional `folder` restricts matches to that
+ * folder and its subtrees (folder paths are relative to the library root).
+ */
+export function searchFiles(db: Database, q: string, folder?: string, limit = -1): FileRow[] {
+  const { where, params } = searchWhere(q, folder);
+  return db
+    .query(
+      `SELECT ${COLS} FROM files${where} ORDER BY name COLLATE NOCASE LIMIT ?`,
+    )
+    .all(...params, limit) as FileRow[];
+}
+
+/** Total matches for the same filters as `searchFiles`, ignoring any limit. */
+export function countSearch(db: Database, q: string, folder?: string): number {
+  const { where, params } = searchWhere(q, folder);
+  return (db.query(`SELECT COUNT(*) AS n FROM files${where}`).get(...params) as { n: number }).n;
 }
 
 /* ---------- favorites ---------- */
 
-export function favoritePaths(db: Database): string[] {
-  // Favorites for deleted files are dropped by replaceLibraryFiles on rescan.
-  return (
-    db
-      .query(
-        "SELECT f.path FROM favorites f JOIN files x ON x.path = f.path ORDER BY f.path",
-      )
-      .all() as { path: string }[]
-  ).map((r) => r.path);
+/** Favorited files, by path. Favorites for deleted files are dropped by replaceLibraryFiles on rescan. */
+export function favoriteFiles(db: Database): FileRow[] {
+  return db
+    .query(
+      `SELECT x.path, x.library, x.folder, x.name, x.size, x.mtime, x.duration
+       FROM favorites f JOIN files x ON x.path = f.path ORDER BY f.path`,
+    )
+    .all() as FileRow[];
 }
 
 export function addFavorite(db: Database, path: string): void {
