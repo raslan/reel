@@ -21,7 +21,8 @@ export function Transport({ size = "bar" }: TransportProps) {
         onClick={prevFile}
         disabled={disabled || !canPrev}
         className={cn(ghost, btn)}
-        title="Previous in folder"
+        title="Previous"
+        aria-label="Previous"
       >
         <SkipBack className="w-[18px] h-[18px]" />
       </button>
@@ -31,6 +32,7 @@ export function Transport({ size = "bar" }: TransportProps) {
         disabled={disabled}
         className={cn(ghost, btn)}
         title="Back 5 seconds"
+        aria-label="Back 5 seconds"
       >
         <RotateCcw className="w-4 h-4" />
       </button>
@@ -44,6 +46,7 @@ export function Transport({ size = "bar" }: TransportProps) {
           disabled && "opacity-30 pointer-events-none",
         )}
         title="Play / pause"
+        aria-label={playing ? "Pause" : "Play"}
       >
         {playing ? (
           <Pause className="w-6 h-6" fill="currentColor" />
@@ -57,6 +60,7 @@ export function Transport({ size = "bar" }: TransportProps) {
         disabled={disabled}
         className={cn(ghost, btn)}
         title="Forward 5 seconds"
+        aria-label="Forward 5 seconds"
       >
         <RotateCw className="w-4 h-4" />
       </button>
@@ -65,7 +69,8 @@ export function Transport({ size = "bar" }: TransportProps) {
         onClick={nextFile}
         disabled={disabled || !canNext}
         className={cn(ghost, btn)}
-        title="Next in folder"
+        title="Next"
+        aria-label="Next"
       >
         <SkipForward className="w-[18px] h-[18px]" />
       </button>

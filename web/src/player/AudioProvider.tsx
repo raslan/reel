@@ -1,63 +1,66 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { errorMessage, listFolder } from "../lib/api";
 import { AudioEngine } from "../lib/audio/engine";
-import { folderKey } from "../lib/keys";
+import { describeMediaError } from "../lib/audio/mediaError";
 import { parentFolder } from "../lib/path";
-import { stepIn } from "../lib/playchain";
-import { sortFiles } from "../lib/sort";
-import { saveJSON } from "../lib/storage";
-import { useAppDispatch, useAppState, VOLUME_KEY } from "../state/context";
-import type { ListResponse } from "../types/api";
+import { stepIn, stepWrapping } from "../lib/playchain";
+import { useAppDispatch, useAppState } from "../state/context";
 import type { FileEntry } from "../types/library";
 
 export interface AudioApi {
   engine: AudioEngine;
   togglePlay: () => void;
-  playFile: (file: FileEntry) => void;
+  /**
+   * Play `file`; next/prev step through `queue` (the list it was played from, in display order).
+   * Playing the file that's already loaded toggles play/pause instead of restarting it.
+   */
+  playFile: (file: FileEntry, queue: FileEntry[]) => void;
   nextFile: () => void;
   prevFile: () => void;
   seekBy: (d: number) => void;
   cycleSpeed: () => void;
+  /** off → repeat queue → repeat one → off. */
+  cycleRepeat: () => void;
   setVolume: (v: number) => void;
-  nudgeVolume: (d: number) => void;
+  toggleMute: () => void;
   canPrev: boolean;
   canNext: boolean;
 }
 
 export const AudioCtx = createContext<AudioApi | null>(null);
 
+const toCurrent = (f: FileEntry) => ({
+  path: f.path,
+  name: f.name,
+  folderPath: parentFolder(f.path),
+  duration: f.duration,
+});
+
+/** Restart-from-top threshold for "previous": past this, prev rewinds instead of changing file. */
+const PREV_REWIND_AFTER_S = 3;
+
 export function AudioProvider({ children }: { children: ReactNode }) {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const qc = useQueryClient();
   const engineRef = useRef<AudioEngine | null>(null);
   if (engineRef.current === null) engineRef.current = new AudioEngine();
   const engine = engineRef.current;
   const stateRef = useRef(state);
   stateRef.current = state;
   const loadedPath = useRef<string | null>(null);
+  /** True when the loaded file was reached by next/auto-advance (so a dead one should be skipped, not stop playback). */
+  const reachedByAdvance = useRef(false);
 
-  const folderPath = state.current?.folderPath;
-  // The current folder's file list (shared cache key) — whether next/prev
-  // have anywhere to go within the folder.
-  const folderQuery = useQuery({
-    queryKey: folderKey(folderPath ?? ""),
-    queryFn: () => listFolder(folderPath as string),
-    enabled: folderPath !== null,
-  });
   const deadPaths = useMemo(() => new Set(state.deadPaths), [state.deadPaths]);
   const { canPrev, canNext } = useMemo(() => {
-    if (state.current === null || folderQuery.data === undefined) {
-      return { canPrev: false, canNext: false };
-    }
-    const files = sortFiles(folderQuery.data.files, state.sort);
+    if (state.current === null) return { canPrev: false, canNext: false };
+    // Repeating the queue means there is always somewhere to go while anything is playable.
+    const step = state.repeat === "queue" ? stepWrapping : stepIn;
     return {
-      canPrev: stepIn(files, state.current.path, -1, deadPaths) !== null,
-      canNext: stepIn(files, state.current.path, 1, deadPaths) !== null,
+      canPrev: step(state.queue, state.current.path, -1, deadPaths) !== null,
+      canNext: step(state.queue, state.current.path, 1, deadPaths) !== null,
     };
-  }, [state.current, folderQuery.data, state.sort, deadPaths]);
+  }, [state.current, state.queue, state.repeat, deadPaths]);
 
   // Load a new file whenever the current file changes.
   useEffect(() => {
@@ -77,46 +80,30 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, [state.speed, engine]);
   useEffect(() => {
     engine.setVolume(state.volume / 100);
-    saveJSON(VOLUME_KEY, state.volume);
   }, [state.volume, engine]);
 
-  // Advance within the current folder, skipping dead files.
+  // Step through the queue the current file was played from, skipping dead files
+  // (and wrapping around the ends when repeating the queue).
+  // `alsoDead` is a path that just failed and isn't in state yet.
   const advance = useCallback(
-    async (dir: 1 | -1): Promise<boolean> => {
-      const cur = stateRef.current.current;
+    (dir: 1 | -1, alsoDead?: string): boolean => {
+      const { current: cur, queue, deadPaths: dead, repeat } = stateRef.current;
       if (cur === null) return false;
-      let files = qc.getQueryData<ListResponse>(folderKey(cur.folderPath))?.files;
-      if (files === undefined) {
-        try {
-          const data = await qc.ensureQueryData({
-            queryKey: folderKey(cur.folderPath),
-            queryFn: () => listFolder(cur.folderPath),
-          });
-          files = data.files;
-        } catch (err) {
-          toast.error(errorMessage(err));
-          return false;
-        }
-      }
-      const next = stepIn(
-        sortFiles(files, stateRef.current.sort),
-        cur.path,
-        dir,
-        new Set(stateRef.current.deadPaths),
-      );
+      const skip = new Set(dead);
+      if (alsoDead !== undefined) skip.add(alsoDead);
+      const next = (repeat === "queue" ? stepWrapping : stepIn)(queue, cur.path, dir, skip);
       if (next === null) return false;
-      dispatch({
-        type: "playFile",
-        file: {
-          path: next.path,
-          name: next.name,
-          folderPath: cur.folderPath,
-          duration: next.duration,
-        },
-      });
+      reachedByAdvance.current = true;
+      if (next.path === cur.path) {
+        // Wrapped onto the same file (a one-file queue): it's already loaded, so just restart it.
+        engine.seek(0);
+        engine.play();
+      } else {
+        dispatch({ type: "playFile", file: toCurrent(next), queue });
+      }
       return true;
     },
-    [qc, dispatch],
+    [dispatch, engine],
   );
   const advanceRef = useRef(advance);
   advanceRef.current = advance;
@@ -132,15 +119,22 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       }),
       engine.on("error", (path) => {
         const cur = stateRef.current.current;
-        if (path !== undefined && cur !== null && cur.path === path) {
-          dispatch({ type: "markDead", path });
-          toast.error(`Could not play "${cur.name}" — file not found.`);
-        }
+        if (path === undefined || cur === null || cur.path !== path) return;
+        const failure = describeMediaError(cur.name, engine.getErrorCode());
+        toast.error(failure.message);
+        dispatch({ type: "setPlaying", playing: false });
+        if (!failure.dead) return;
+        dispatch({ type: "markDead", path });
+        // During continuous playback keep going; if the user picked this file, leave them to choose.
+        if (reachedByAdvance.current) advanceRef.current(1, path);
       }),
       engine.on("ended", () => {
-        void advanceRef.current(1).then((advanced) => {
-          if (!advanced) dispatch({ type: "setPlaying", playing: false });
-        });
+        if (stateRef.current.repeat === "one") {
+          engine.seek(0);
+          engine.play();
+          return;
+        }
+        if (!advanceRef.current(1)) dispatch({ type: "setPlaying", playing: false });
       }),
     ];
     return () => {
@@ -157,31 +151,38 @@ export function AudioProvider({ children }: { children: ReactNode }) {
         if (stateRef.current.current === null) return;
         engine.toggle();
       },
-      playFile: (file) => {
-        dispatch({
-          type: "playFile",
-          file: {
-            path: file.path,
-            name: file.name,
-            folderPath: parentFolder(file.path),
-            duration: file.duration,
-          },
-        });
+      playFile: (file, queue) => {
+        const { current: cur, deadPaths: dead } = stateRef.current;
+        if (cur?.path === file.path) {
+          if (dead.includes(file.path)) {
+            // Retrying a file that failed: the effect won't reload an unchanged path.
+            dispatch({ type: "playFile", file: toCurrent(file), queue });
+            engine.load(file.path, true);
+          } else {
+            // Same file, maybe from a different list: next/prev should follow the one just used.
+            dispatch({ type: "setQueue", queue });
+            engine.toggle();
+          }
+          return;
+        }
+        reachedByAdvance.current = false;
+        dispatch({ type: "playFile", file: toCurrent(file), queue });
       },
       nextFile: () => {
-        void advance(1);
+        advance(1);
       },
       prevFile: () => {
-        if (engine.getPosition() > 3) {
+        if (engine.getPosition() > PREV_REWIND_AFTER_S) {
           engine.seek(0);
           return;
         }
-        void advance(-1);
+        advance(-1);
       },
       seekBy: (d) => engine.seekBy(d),
       cycleSpeed: () => dispatch({ type: "cycleSpeed" }),
+      cycleRepeat: () => dispatch({ type: "cycleRepeat" }),
       setVolume: (v) => dispatch({ type: "setVolume", volume: v }),
-      nudgeVolume: (d) => dispatch({ type: "setVolume", volume: stateRef.current.volume + d }),
+      toggleMute: () => dispatch({ type: "toggleMute" }),
       canPrev,
       canNext,
     }),

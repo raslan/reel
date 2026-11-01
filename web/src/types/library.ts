@@ -8,4 +8,6 @@ export interface FileEntry {
   path: string;
   duration: number | null;
   size: number;
+  /** Last-modified time, seconds since the epoch. */
+  mtime: number;
 }

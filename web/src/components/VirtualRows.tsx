@@ -1,4 +1,3 @@
-import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { type ReactNode, useRef } from "react";
 
@@ -9,12 +8,14 @@ interface VirtualRowsProps {
 }
 
 /**
- * Windowed row list (56px rows) with FLIP animation on insert/remove/reorder.
- * Rows are positioned with `top` so auto-animate's transform stays free.
+ * Windowed row list (56px rows). The inner box is the full list height, so the
+ * scrollbar reflects every row and not just the rendered window. Rows are not
+ * animated: in a virtualized list, rows entering and leaving the window while
+ * you scroll would each start an enter/exit animation (measured: >100 in half a
+ * second of scrolling).
  */
 export function VirtualRows({ count, renderRow, keyOf }: VirtualRowsProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [parentRef] = useAutoAnimate<HTMLDivElement>();
   const virtualizer = useVirtualizer({
     count,
     getScrollElement: () => scrollRef.current,
@@ -23,7 +24,7 @@ export function VirtualRows({ count, renderRow, keyOf }: VirtualRowsProps) {
   });
   return (
     <div ref={scrollRef} className="h-full flex-1 overflow-y-auto">
-      <div ref={parentRef} className="relative h-full pb-[150px] md:pb-[130px] px-1">
+      <div className="relative px-1" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((vi) => (
           <div
             key={keyOf(vi.index)}

@@ -1,32 +1,29 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { openEvents } from "../lib/events";
-import { peaksKey } from "../lib/keys";
+import { describeRescan, invalidateForEvent } from "../lib/libraryEvents";
+import { useAppDispatch } from "../state/context";
 
-/** SSE -> query invalidation: the client never polls for library changes. */
+/** SSE -> query invalidation and user feedback: the client never polls for library changes. */
 export function useLibraryEvents() {
   const qc = useQueryClient();
+  const dispatch = useAppDispatch();
   useEffect(
     () =>
       openEvents((name, data) => {
-        const lib = data.path;
-        if (name === "library-changed") {
-          void qc.invalidateQueries({
-            predicate: (q) =>
-              q.queryKey[0] === "folder" &&
-              (lib === undefined ||
-                q.queryKey[1] === "" ||
-                (typeof q.queryKey[1] === "string" &&
-                  (q.queryKey[1] === lib || q.queryKey[1].startsWith(`${lib}/`)))),
-          });
-          void qc.invalidateQueries({ queryKey: ["search"] });
-        } else if (name === "libraries-changed") {
-          void qc.invalidateQueries({ queryKey: ["folder"] });
-          void qc.invalidateQueries({ queryKey: ["search"] });
-        } else if (name === "peaks-ready" || name === "peaks-failed") {
-          if (lib) void qc.invalidateQueries({ queryKey: peaksKey(lib) });
+        invalidateForEvent(qc, name, data.path);
+        if (name === "library-changed" || name === "libraries-changed") {
+          // Files may be back (or gone for good); give "unplayable" another chance.
+          dispatch({ type: "clearDead" });
+        } else if (name === "rescan-finished") {
+          // Quiet when nothing changed (it also fires on server start); Settings shows the last result.
+          const summary = describeRescan(data);
+          if (summary !== null) toast.success(`Rescan finished — ${summary}`);
+        } else if (name === "rescan-failed") {
+          toast.error("Rescan failed — see the server log");
         }
       }),
-    [qc],
+    [qc, dispatch],
   );
 }

@@ -1,137 +1,79 @@
 import { cn } from "cn";
-import { ChevronUp, Maximize2, Pause, Play, SkipBack, SkipForward } from "lucide-react";
-import { useAudio } from "../hooks/useAudio";
-import { usePeaks } from "../hooks/usePeaks";
+import { Maximize2 } from "lucide-react";
 import { fmt } from "../lib/format";
 import { useAppDispatch, useAppState } from "../state/context";
-import { DeckStatus } from "./DeckStatus";
-import { LiveProgress } from "./LiveProgress";
 import { LiveTime } from "./LiveTime";
+import { RepeatButton } from "./RepeatButton";
+import { SpeedButton } from "./SpeedButton";
 import { Transport } from "./Transport";
 import { VolumeControl } from "./VolumeControl";
 import { Waveform } from "./Waveform";
 
-export function PlayerBar() {
+interface PlayerBarProps {
+  /** Real peaks for the current file, or null while pending/failed. */
+  peaks: number[] | null;
+}
+
+/**
+ * Timeline-style player: the waveform runs the full width on top, with the
+ * times at its ends; below it the title, transport and controls. On wide
+ * screens that's one row of three; on phones the transport gets its own row
+ * and volume is left to the device's buttons.
+ */
+export function PlayerBar({ peaks }: PlayerBarProps) {
   const dispatch = useAppDispatch();
-  const { current, playing, speed } = useAppState();
-  const { togglePlay, nextFile, prevFile, cycleSpeed, canPrev, canNext } = useAudio();
-  const peaksQuery = usePeaks(current?.path ?? null);
-  const peaks = peaksQuery.data?.status === "ready" ? (peaksQuery.data.peaks ?? null) : null;
-  const spd = speed === 1 ? "1×" : `${speed}×`;
+  const { current } = useAppState();
   const folderName = current
     ? current.folderPath === ""
       ? "Library"
       : current.folderPath.split("/").pop()
     : "";
+  const openZen = () => dispatch({ type: "openZen" });
 
   return (
-    <div className="relative border-t border-line bg-panel brushed px-3 md:px-6 pt-3 md:pt-3.5 pb-3.5 md:pb-3.5">
-      <LiveProgress />
-      <div className="flex items-center gap-3 md:gap-5">
+    <div className="border-t border-line bg-panel brushed px-3 md:px-6 py-2.5 flex flex-col gap-2">
+      <div className="flex items-center gap-2.5 md:gap-3">
+        <LiveTime className="font-mono text-[11px] text-dim/60 w-10 text-right shrink-0" />
+        <Waveform bars={72} fit peaks={peaks} className="flex-1 h-8" />
+        <span className="font-mono text-[11px] text-dim/60 w-10 shrink-0">
+          {fmt(current?.duration ?? null)}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1">
         <button
           type="button"
-          className="flex flex-1 min-w-0 md:flex-none md:w-[142px] items-center gap-2.5 rounded-lg border border-line bg-bg/70 px-2.5 py-1.5 text-left hover:border-gold/40 transition-colors"
-          title="Open zen player"
+          onClick={openZen}
+          disabled={current === null}
+          title={current ? current.name : "Open zen player"}
+          className="min-w-0 text-left rounded-md hover:text-gold transition-colors disabled:pointer-events-none"
         >
-          <Waveform bars={12} peaks={peaks} className="w-[72px] h-7 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[13.5px] font-semibold truncate leading-tight">
-              {current?.name ?? "—"}
-            </div>
-            <div className="text-[11px] text-dim/50 truncate">{folderName}</div>
+          <div className="text-[13.5px] font-semibold truncate leading-tight">
+            {current ? current.name : "Nothing playing"}
           </div>
+          <div className="text-[11px] text-dim/50 truncate">{folderName}</div>
         </button>
 
-        {/* Transport */}
-        <div className="hidden md:flex items-center gap-2.5">
+        <div className="col-span-2 row-start-2 md:col-span-1 md:col-start-2 md:row-start-1 justify-self-center">
           <Transport />
         </div>
 
-        {/* 72-bar waveform — desktop only */}
-        <div className="hidden md:flex items-center gap-2.5 flex-1">
-          <LiveTime className="font-mono text-[11.5px] text-dim/60 w-10 text-right shrink-0" />
-          <Waveform bars={72} peaks={peaks} className="flex-1 h-7" />
-          <span className="font-mono text-[11.5px] text-dim/60 w-10 shrink-0">
-            {fmt(current?.duration ?? null)}
-          </span>
-        </div>
-
-        {/* Right cluster */}
-        <div className="hidden md:flex items-center gap-2.5 shrink-0">
-          <DeckStatus />
+        <div className="col-start-2 row-start-1 md:col-start-3 justify-self-end flex items-center gap-1 md:gap-2">
+          <SpeedButton />
+          <RepeatButton />
+          <VolumeControl className="hidden md:flex" />
           <button
             type="button"
-            onClick={cycleSpeed}
-            className={cn(
-              "ghost-btn w-8 h-8 rounded-md font-mono text-[11.5px]",
-              speed === 1 ? "text-gold" : "text-dim/70",
-            )}
-            title="Playback speed"
-          >
-            {spd}
-          </button>
-          <VolumeControl />
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "openZen" })}
+            onClick={openZen}
             disabled={current === null}
+            title="Open zen player"
+            aria-label="Open zen player"
             className={cn(
               "ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70",
               current === null && "opacity-30 pointer-events-none",
             )}
-            title="Open zen player"
           >
             <Maximize2 className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Mobile transport */}
-        <div className="flex md:hidden items-center gap-2.5">
-          <button
-            type="button"
-            onClick={prevFile}
-            disabled={current === null || !canPrev}
-            className="ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70"
-            title="Previous in folder"
-          >
-            <SkipBack className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={togglePlay}
-            disabled={current === null}
-            className={cn(
-              "play-btn w-10 h-10 rounded-full bg-gold text-bg flex items-center justify-center",
-              current === null && "opacity-30 pointer-events-none",
-            )}
-            title="Play / pause"
-          >
-            {playing ? (
-              <Pause className="w-5 h-5" fill="currentColor" />
-            ) : (
-              <Play className="w-5 h-5 translate-x-[1px]" fill="currentColor" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={nextFile}
-            disabled={current === null || !canNext}
-            className="ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70"
-            title="Next in folder"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "openZen" })}
-            disabled={current === null}
-            className={cn(
-              "ghost-btn w-9 h-9 rounded-full flex items-center justify-center text-dim/70",
-              current === null && "opacity-30 pointer-events-none",
-            )}
-            title="Open zen player"
-          >
-            <ChevronUp className="w-4 h-4" />
           </button>
         </div>
       </div>

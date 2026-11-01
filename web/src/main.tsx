@@ -16,7 +16,10 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+if (root === null) throw new Error("#root missing from index.html");
+
+createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AppProvider>

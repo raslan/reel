@@ -5,7 +5,10 @@ export interface CurrentFile {
   duration: number | null;
 }
 
-export type SortKey = "name" | "duration";
+/** What happens when a file ends: stop at the end of the queue, wrap the queue, or replay the file. */
+export type RepeatMode = "off" | "queue" | "one";
+
+export type SortKey = "name" | "duration" | "modified" | "size";
 
 export interface SortPref {
   key: SortKey;

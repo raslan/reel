@@ -8,7 +8,8 @@ import { SkeletonRows } from "../components/SkeletonRows";
 import { SortControl } from "../components/SortControl";
 import { VirtualRows } from "../components/VirtualRows";
 import { useAudio } from "../hooks/useAudio";
-import { useFavorites } from "../hooks/useFavorites";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useFavoritePaths } from "../hooks/useFavoritePaths";
 import { useFavoriteToggle } from "../hooks/useFavoriteToggle";
 import { useFolder } from "../hooks/useFolder";
 import { useSearch } from "../hooks/useSearch";
@@ -18,29 +19,35 @@ import type { FileEntry, FolderEntry } from "../types/library";
 
 type Row = { kind: "folder"; folder: FolderEntry } | { kind: "file"; file: FileEntry };
 
+const SEARCH_DEBOUNCE_MS = 250;
+
 export function LibraryScreen() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { playFile } = useAudio();
   const { toggle } = useFavoriteToggle();
-  const favorites = useFavorites();
-  const favSet = new Set(favorites.data?.paths ?? []);
-  const searching = state.folderQuery.trim() !== "";
+  const favSet = useFavoritePaths();
   const folder = useFolder(state.folderPath);
-  const search = useSearch(state.folderQuery, state.folderPath);
-  const isPending = searching ? search.isPending : folder.isPending;
-  const isError = searching ? search.isError : folder.isError;
-  const files = searching
-    ? sortFiles(search.data?.files ?? [], state.sort)
-    : sortFiles(folder.data?.files ?? [], state.sort);
+  const debouncedQuery = useDebouncedValue(state.folderQuery, SEARCH_DEBOUNCE_MS);
+  const search = useSearch(debouncedQuery, state.folderPath);
+  // Keep showing the folder until the first results arrive instead of flashing a skeleton;
+  // clearing the box returns to the folder at once.
+  const typed = state.folderQuery.trim() !== "";
+  const searching = typed && search.data !== undefined;
+  const isPending = folder.isPending;
+  const isError = folder.isError || (typed && search.isError);
+  const files = sortFiles((searching ? search.data?.files : folder.data?.files) ?? [], state.sort);
   const folders = searching ? [] : (folder.data?.folders ?? []);
   const rows: Row[] = [
     ...folders.map((f) => ({ kind: "folder" as const, folder: f })),
     ...files.map((f) => ({ kind: "file" as const, file: f })),
   ];
   const crumbs = state.folderPath === "" ? [] : state.folderPath.split("/");
+  const total = search.data?.total ?? 0;
   const currentLabel = searching
-    ? `${search.data?.total ?? 0} matches`
+    ? files.length < total
+      ? `${total} matches · showing first ${files.length}`
+      : `${total} ${total === 1 ? "match" : "matches"}`
     : `${folders.length} folders · ${files.length} files`;
 
   return (
@@ -80,7 +87,7 @@ export function LibraryScreen() {
             <EmptyState
               icon={SearchX}
               title="No matches"
-              hint={`Nothing named "${state.folderQuery}" here.`}
+              hint={`Nothing named "${state.folderQuery.trim()}" here.`}
             />
           ) : (
             <EmptyState
@@ -112,7 +119,7 @@ export function LibraryScreen() {
                 return (
                   <FileRow
                     file={row.file}
-                    onPlay={(f) => playFile(f)}
+                    onPlay={(f) => playFile(f, files)}
                     isCurrent={state.current?.path === row.file.path}
                     isPlaying={state.current?.path === row.file.path && state.playing}
                     isFav={favSet.has(row.file.path)}

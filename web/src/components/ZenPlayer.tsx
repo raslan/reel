@@ -1,23 +1,23 @@
-import { cn } from "cn";
 import { X } from "lucide-react";
-import { useAudio } from "../hooks/useAudio";
-import { usePeaks } from "../hooks/usePeaks";
 import { fmt } from "../lib/format";
 import { useAppDispatch, useAppState } from "../state/context";
 import { DeckStatus } from "./DeckStatus";
 import { LiveTime } from "./LiveTime";
+import { RepeatButton } from "./RepeatButton";
+import { SpeedButton } from "./SpeedButton";
 import { Transport } from "./Transport";
 import { VolumeControl } from "./VolumeControl";
 import { VUMeter } from "./VUMeter";
 import { Waveform } from "./Waveform";
 
-export function ZenPlayer() {
+interface ZenPlayerProps {
+  /** Real peaks for the current file, or null while pending/failed. */
+  peaks: number[] | null;
+}
+
+export function ZenPlayer({ peaks }: ZenPlayerProps) {
   const dispatch = useAppDispatch();
-  const { current, speed, zen } = useAppState();
-  const { cycleSpeed } = useAudio();
-  const peaksQuery = usePeaks(current?.path ?? null);
-  const peaks = peaksQuery.data?.status === "ready" ? (peaksQuery.data.peaks ?? null) : null;
-  const spd = speed === 1 ? "1×" : `${speed}×`;
+  const { current, zen } = useAppState();
   if (!zen || current === null) return null;
 
   return (
@@ -30,13 +30,17 @@ export function ZenPlayer() {
             onClick={() => dispatch({ type: "closeZen" })}
             className="ghost-btn w-8 h-8 rounded-full flex items-center justify-center text-dim/70"
             title="Close (Esc)"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="w-full text-center">
-          <div className="font-display font-bold text-[22px] md:text-[28px] tracking-tight truncate">
+          <div
+            className="font-display font-bold text-[22px] md:text-[28px] tracking-tight truncate"
+            title={current.name}
+          >
             {current.name}
           </div>
           <div className="font-mono text-[11.5px] text-dim/50 mt-1 truncate">
@@ -60,17 +64,8 @@ export function ZenPlayer() {
 
         <div className="flex items-center gap-4 md:gap-6">
           <VUMeter />
-          <button
-            type="button"
-            onClick={cycleSpeed}
-            className={cn(
-              "ghost-btn h-8 px-2.5 rounded-md font-mono text-[11.5px]",
-              speed === 1 ? "text-gold" : "text-dim/70",
-            )}
-            title="Playback speed"
-          >
-            {spd}
-          </button>
+          <SpeedButton />
+          <RepeatButton />
           <VolumeControl />
         </div>
       </div>

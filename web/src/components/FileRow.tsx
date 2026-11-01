@@ -9,7 +9,7 @@ interface FileRowProps {
   isCurrent: boolean;
   isPlaying: boolean;
   isFav: boolean;
-  onStar: (path: string, add: boolean) => void;
+  onStar: (file: FileEntry, add: boolean) => void;
   /** Show the full path under the name (search/favorites results). */
   showPath?: boolean;
 }
@@ -48,15 +48,22 @@ export function FileRow({
         )}
       </button>
       <div className="flex-1 min-w-0">
-        <div className={cn("text-[13.5px] font-medium truncate", isCurrent && "text-gold")}>
+        <div
+          className={cn("text-[13.5px] font-medium truncate", isCurrent && "text-gold")}
+          title={file.name}
+        >
           {file.name}
         </div>
-        {showPath ? <div className="text-[11px] text-dim/50 truncate">{file.path}</div> : null}
+        {showPath && (
+          <div className="text-[11px] text-dim/50 truncate" title={file.path}>
+            {file.path}
+          </div>
+        )}
       </div>
       <span className="font-mono text-[11.5px] text-dim/60 shrink-0">{fmt(file.duration)}</span>
       <button
         type="button"
-        onClick={() => onStar(file.path, !isFav)}
+        onClick={() => onStar(file, !isFav)}
         className={cn(
           "w-8 h-8 rounded-md flex items-center justify-center shrink-0 transition-colors",
           isFav ? "star-on text-gold" : "text-dim/40 hover:text-dim",

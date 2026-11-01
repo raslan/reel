@@ -1,14 +1,26 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "cn";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
+import { useRescanStatus } from "../hooks/useRescanStatus";
 import { clearDb, errorMessage, rescan } from "../lib/api";
+import { rescanKey } from "../lib/keys";
+import { describeRescan } from "../lib/libraryEvents";
 
 export function SettingsScreen() {
+  const qc = useQueryClient();
+  const status = useRescanStatus();
+  const last = status.data?.last ?? null;
+  // The server is the source of truth: the spinner runs for the whole scan, not just the POST.
+  const rescanning = status.data?.running === true;
+
   const doRescan = useMutation({
     mutationFn: rescan,
-    onSuccess: () => toast.success("Rescan started"),
+    onSuccess: () => {
+      toast.success("Rescan started");
+      void qc.invalidateQueries({ queryKey: rescanKey });
+    },
     onError: (err) => toast.error(errorMessage(err)),
   });
 
@@ -40,15 +52,32 @@ export function SettingsScreen() {
                   Re-walk the mounted folders and refresh durations. This is how new or changed
                   files are picked up.
                 </div>
+                {rescanning ? (
+                  <div className="text-[12px] text-gold mt-1">Scanning…</div>
+                ) : last ? (
+                  <div className={cn("text-[12px] mt-1", last.ok ? "text-dim/50" : "text-red-400")}>
+                    {last.ok
+                      ? `Last scan ${new Date(last.finishedAt).toLocaleTimeString()} — ${describeRescan(last) ?? "no changes"}`
+                      : `Last scan ${new Date(last.finishedAt).toLocaleTimeString()} failed — see the server log`}
+                  </div>
+                ) : null}
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => doRescan.mutate()}
-                disabled={doRescan.isPending}
-                className={cn("gap-1.5", doRescan.isPending && "pointer-events-none")}
+                disabled={doRescan.isPending || rescanning}
+                className={cn(
+                  "gap-1.5",
+                  (doRescan.isPending || rescanning) && "pointer-events-none",
+                )}
               >
-                <RefreshCw className={cn("w-3.5 h-3.5", doRescan.isPending && "animate-spin")} />
+                <RefreshCw
+                  className={cn(
+                    "w-3.5 h-3.5",
+                    (doRescan.isPending || rescanning) && "animate-spin",
+                  )}
+                />
                 Rescan
               </Button>
             </div>

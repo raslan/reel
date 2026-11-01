@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { FIRST_DIR } from "../lib/sort";
 import type { SortKey, SortPref } from "../types/player";
 
 interface SortControlProps {
@@ -11,7 +12,9 @@ export function SortControl({ sort, onChange }: SortControlProps) {
   const btn = (key: SortKey, label: string) => (
     <button
       type="button"
-      onClick={() => onChange({ key, dir: sort.key === key ? ((sort.dir * -1) as 1 | -1) : 1 })}
+      onClick={() =>
+        onChange({ key, dir: sort.key === key ? ((sort.dir * -1) as 1 | -1) : FIRST_DIR[key] })
+      }
       className={cn(
         "ghost-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px]",
         sort.key === key ? "text-gold" : "text-dim/70",
@@ -32,6 +35,8 @@ export function SortControl({ sort, onChange }: SortControlProps) {
     <div className="flex items-center gap-1">
       {btn("name", "Name")}
       {btn("duration", "Length")}
+      {btn("modified", "Date")}
+      {btn("size", "Size")}
     </div>
   );
 }

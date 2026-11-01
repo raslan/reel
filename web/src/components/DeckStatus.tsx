@@ -1,14 +1,31 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useAudio } from "../hooks/useAudio";
+import type { AudioEngine, EngineEvent } from "../lib/audio/engine";
 import { useAppState } from "../state/context";
 
-/** LED + STANDBY / PAUSED / PLAYING. Re-renders on seeked so a seek-to-0 updates it. */
+/** Events after which "has this file started?" can have changed. */
+const POSITION_EVENTS: EngineEvent[] = ["play", "pause", "seeked", "duration"];
+
+/** True once the element is past 0:00. Subscribed to the engine so render stays pure. */
+function useStarted(engine: AudioEngine): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      const offs = POSITION_EVENTS.map((event) => engine.on(event, notify));
+      return () => {
+        offs.forEach((off) => {
+          off();
+        });
+      };
+    },
+    () => engine.getPosition() > 0,
+  );
+}
+
+/** LED + STANDBY / PAUSED / PLAYING. */
 export function DeckStatus({ className }: { className?: string }) {
   const { engine } = useAudio();
   const { playing, current } = useAppState();
-  const [, setTick] = useState(0);
-  useEffect(() => engine.on("seeked", () => setTick((t) => t + 1)), [engine]);
-  const started = current !== null && engine.getPosition() > 0;
+  const started = useStarted(engine) && current !== null;
   const label = playing ? "PLAYING" : started ? "PAUSED" : "STANDBY";
   const led = playing ? "bg-green" : started ? "bg-gold" : "bg-gray";
   const text = playing ? "text-green" : started ? "text-gold" : "text-dim/60";

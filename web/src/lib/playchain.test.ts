@@ -1,8 +1,43 @@
 import { describe, expect, it } from "vitest";
 import type { FileEntry } from "../types/library";
-import { stepIn } from "./playchain";
+import { stepIn, stepWrapping } from "./playchain";
 
-const f = (name: string): FileEntry => ({ name, path: name, duration: null, size: 0 });
+describe("stepWrapping", () => {
+  const files = [f("a"), f("b"), f("c")];
+
+  it("behaves like stepIn in the middle of the list", () => {
+    expect(stepWrapping(files, "a", 1, new Set())?.path).toBe("b");
+    expect(stepWrapping(files, "c", -1, new Set())?.path).toBe("b");
+  });
+
+  it("wraps from the end to the start and from the start to the end", () => {
+    expect(stepWrapping(files, "c", 1, new Set())?.path).toBe("a");
+    expect(stepWrapping(files, "a", -1, new Set())?.path).toBe("c");
+  });
+
+  it("skips dead files while wrapping", () => {
+    expect(stepWrapping(files, "b", 1, new Set(["c", "a"]))?.path).toBe("b");
+    expect(stepWrapping(files, "c", 1, new Set(["a"]))?.path).toBe("b");
+  });
+
+  it("a single playable file wraps onto itself (so it loops)", () => {
+    expect(stepWrapping([f("a")], "a", 1, new Set())?.path).toBe("a");
+  });
+
+  it("is null when nothing is playable or the current file isn't in the list", () => {
+    expect(stepWrapping(files, "a", 1, new Set(["a", "b", "c"]))).toBeNull();
+    expect(stepWrapping(files, "zzz", 1, new Set())).toBeNull();
+    expect(stepWrapping([], "a", 1, new Set())).toBeNull();
+  });
+});
+
+const f = (name: string): FileEntry => ({
+  name,
+  path: name,
+  duration: null,
+  size: 0,
+  mtime: 0,
+});
 
 describe("stepIn", () => {
   it("steps forward within the folder", () => {

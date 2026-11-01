@@ -4,16 +4,18 @@ import { useAppState } from "../state/context";
 import { Slider } from "./ui/slider";
 
 export function VolumeControl({ className }: { className?: string }) {
-  const { setVolume, nudgeVolume } = useAudio();
+  const { setVolume, toggleMute } = useAudio();
   const { volume } = useAppState();
   const Icon = volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2;
+  const label = volume === 0 ? "Unmute" : "Mute";
   return (
     <div className={`flex items-center gap-2.5 ${className ?? ""}`}>
       <button
         type="button"
-        onClick={() => nudgeVolume(10)}
+        onClick={toggleMute}
         className="ghost-btn w-8 h-8 rounded-full flex items-center justify-center text-dim/70"
-        title="Volume"
+        title={`${label} (M)`}
+        aria-label={label}
       >
         <Icon className="w-[17px] h-[17px]" />
       </button>

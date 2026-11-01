@@ -1,4 +1,4 @@
-import { Star } from "lucide-react";
+import { Star, StarOff } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { FileRow } from "../components/FileRow";
 import { SkeletonRows } from "../components/SkeletonRows";
@@ -8,20 +8,13 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useFavoriteToggle } from "../hooks/useFavoriteToggle";
 import { sortFiles } from "../lib/sort";
 import { useAppState } from "../state/context";
-import type { FileEntry } from "../types/library";
 
 export function FavoritesScreen() {
   const state = useAppState();
   const { playFile } = useAudio();
   const { toggle } = useFavoriteToggle();
   const favorites = useFavorites();
-  const files: FileEntry[] = (favorites.data?.paths ?? []).map((p) => ({
-    name: p.split("/").pop() ?? p,
-    path: p,
-    duration: null,
-    size: 0,
-  }));
-  const sorted = sortFiles(files, state.sort);
+  const sorted = sortFiles(favorites.data?.files ?? [], state.sort);
 
   return (
     <div className="h-full flex flex-col">
@@ -31,7 +24,7 @@ export function FavoritesScreen() {
             Favorites
           </h1>
           <span className="font-mono text-[11px] text-dim/50 shrink-0">
-            {favorites.data ? `${files.length} starred` : ""}
+            {favorites.data ? `${sorted.length} starred` : ""}
           </span>
         </div>
         <p className="text-[12px] text-dim/50 mt-1 mb-2">
@@ -41,6 +34,12 @@ export function FavoritesScreen() {
       <div className="flex-1 h-full min-h-0">
         {favorites.isPending ? (
           <SkeletonRows count={5} />
+        ) : favorites.isError ? (
+          <EmptyState
+            icon={StarOff}
+            title="Could not load favorites"
+            hint="Check that the server is reachable."
+          />
         ) : sorted.length === 0 ? (
           <EmptyState icon={Star} title="No favorites yet" hint="Star a file to pin it here." />
         ) : (
@@ -54,7 +53,7 @@ export function FavoritesScreen() {
                 return (
                   <FileRow
                     file={file}
-                    onPlay={(f) => playFile(f)}
+                    onPlay={(f) => playFile(f, sorted)}
                     isCurrent={state.current?.path === file.path}
                     isPlaying={state.current?.path === file.path && state.playing}
                     isFav

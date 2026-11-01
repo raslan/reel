@@ -5,6 +5,6 @@ import { folderKey } from "../lib/keys";
 export function useFolder(path: string) {
   return useQuery({
     queryKey: folderKey(path),
-    queryFn: () => listFolder(path),
+    queryFn: ({ signal }) => listFolder(path, signal),
   });
 }

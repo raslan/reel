@@ -8,9 +8,7 @@ class ApiError extends Error {
 }
 
 export function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  return "Something went wrong";
+  return err instanceof Error ? err.message : "Something went wrong";
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -28,19 +26,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+// Writes always send a JSON content type: the server refuses writes without one,
+// which is what stops other sites from firing them at us cross-origin.
+const JSON_HEADERS = { "content-type": "application/json" };
+
 export const http = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: JSON_HEADERS,
       body: body === undefined ? undefined : JSON.stringify(body),
-    }),
-  put: <T>(path: string, body: unknown) =>
-    request<T>(path, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
     }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };

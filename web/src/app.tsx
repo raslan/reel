@@ -4,13 +4,20 @@ import { useEffect } from "react";
 import { PlayerBar } from "./components/PlayerBar";
 import { ZenPlayer } from "./components/ZenPlayer";
 import { useAudio } from "./hooks/useAudio";
+import { useHashRoute } from "./hooks/useHashRoute";
 import { useLibraryEvents } from "./hooks/useLibraryEvents";
+import { useMediaSession } from "./hooks/useMediaSession";
+import { usePeaks } from "./hooks/usePeaks";
+import { shortcutFor } from "./lib/shortcuts";
 import { FavoritesScreen } from "./screens/FavoritesScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { useAppDispatch, useAppState } from "./state/context";
 import type { Screen } from "./state/reducer";
+
+/** Seconds moved by the arrow keys. */
+const SEEK_STEP_S = 5;
 
 const NAV: { screen: Screen; label: string; icon: typeof FolderOpen }[] = [
   { screen: "search", label: "Search", icon: Search },
@@ -22,30 +29,54 @@ const NAV: { screen: Screen; label: string; icon: typeof FolderOpen }[] = [
 export function App() {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { togglePlay, seekBy, cycleSpeed } = useAudio();
+  const { togglePlay, seekBy, cycleSpeed, cycleRepeat, toggleMute } = useAudio();
   useLibraryEvents();
+  useMediaSession();
+  useHashRoute();
 
-  // Global keyboard: Space, arrows, Esc.
+  // Peaks for the playing file, fetched once here and passed to every waveform consumer.
+  const peaksQuery = usePeaks(state.current?.path ?? null);
+  const peaks = peaksQuery.data?.status === "ready" ? (peaksQuery.data.peaks ?? null) : null;
+
+  // Global keyboard; shortcutFor decides when a key is ours (not typing, not a widget's own key).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        togglePlay();
-      } else if (e.key === "ArrowRight") {
-        seekBy(5);
-      } else if (e.key === "ArrowLeft") {
-        seekBy(-5);
-      } else if (e.key === "Escape") {
-        dispatch({ type: "closeZen" });
-      } else if (e.key === "s") {
-        cycleSpeed();
+      const shortcut = shortcutFor(e);
+      if (shortcut === null) return;
+      e.preventDefault();
+      switch (shortcut) {
+        case "togglePlay":
+          togglePlay();
+          break;
+        case "seekForward":
+          seekBy(SEEK_STEP_S);
+          break;
+        case "seekBack":
+          seekBy(-SEEK_STEP_S);
+          break;
+        case "cycleSpeed":
+          cycleSpeed();
+          break;
+        case "cycleRepeat":
+          cycleRepeat();
+          break;
+        case "toggleMute":
+          toggleMute();
+          break;
+        case "closeZen":
+          dispatch({ type: "closeZen" });
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, seekBy, cycleSpeed, dispatch]);
+  }, [togglePlay, seekBy, cycleSpeed, cycleRepeat, toggleMute, dispatch]);
+
+  // Tapping the tab you're already on is "get back": Library climbs out to its root.
+  const goTo = (target: Screen) =>
+    target === "library" && state.screen === "library"
+      ? dispatch({ type: "setFolderPath", path: "" })
+      : dispatch({ type: "setScreen", screen: target });
 
   const screen =
     state.screen === "search" ? (
@@ -71,7 +102,7 @@ export function App() {
             <button
               key={s}
               type="button"
-              onClick={() => dispatch({ type: "setScreen", screen: s })}
+              onClick={() => goTo(s)}
               className={cn(
                 "flex items-center gap-2.5 px-2.5 h-9 rounded-md text-[13px] transition-colors",
                 state.screen === s
@@ -88,14 +119,14 @@ export function App() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <main className="flex-1 min-h-0 overflow-hidden">{screen}</main>
-        <PlayerBar />
+        <PlayerBar peaks={peaks} />
         {/* Mobile tab bar */}
         <nav className="md:hidden flex border-t border-line bg-panel brushed">
           {NAV.map(({ screen: s, label, icon: Icon }) => (
             <button
               key={s}
               type="button"
-              onClick={() => dispatch({ type: "setScreen", screen: s })}
+              onClick={() => goTo(s)}
               className={cn(
                 "flex-1 flex flex-col items-center gap-1 py-2.5 text-[10.5px] transition-colors",
                 state.screen === s ? "text-gold" : "text-dim/60",
@@ -108,7 +139,7 @@ export function App() {
         </nav>
       </div>
 
-      <ZenPlayer />
+      <ZenPlayer peaks={peaks} />
     </div>
   );
 }

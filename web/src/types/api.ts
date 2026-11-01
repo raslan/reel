@@ -6,12 +6,13 @@ export interface ListResponse {
 }
 
 export interface SearchResponse {
+  /** At most `limit` matches; `total` is the full match count. */
   files: FileEntry[];
   total: number;
 }
 
 export interface FavoritesResponse {
-  paths: string[];
+  files: FileEntry[];
 }
 
 export interface OkResponse {
@@ -28,4 +29,12 @@ export interface PeaksResponse {
 
 export interface RescanStarted {
   status: string;
+}
+
+export interface RescanStatus {
+  running: boolean;
+  last:
+    | { ok: true; finishedAt: number; added: number; removed: number; changed: number }
+    | { ok: false; finishedAt: number; error: string }
+    | null;
 }

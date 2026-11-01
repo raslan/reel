@@ -21,6 +21,18 @@ function tokens(): [[number, number, number], [number, number, number]] {
   return [gold, orange];
 }
 
+/** Horizontal space per bar (≈4px bar + 2px gap): the density the waveform has always had. */
+export const BAR_PITCH_PX = 6;
+const MIN_BARS = 12;
+/** The server sends this many peak values; more bars than that would just repeat them. */
+const MAX_BARS = 1024;
+
+/** How many bars fit `widthPx` at the standard density; `fallback` until the width is measured. */
+export function barCount(widthPx: number, fallback: number): number {
+  if (!Number.isFinite(widthPx) || widthPx <= 0) return fallback;
+  return Math.min(MAX_BARS, Math.max(MIN_BARS, Math.floor(widthPx / BAR_PITCH_PX)));
+}
+
 export function waveColor(i: number, n: number): string {
   const [a, b] = tokens();
   const t = n > 1 ? i / (n - 1) : 0;
