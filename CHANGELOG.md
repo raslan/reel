@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0](https://github.com/raslan/reel/compare/v1.1.0...v1.2.0) (2026-11-01)
+
+
+### Features
+
+* **server:** modular API, auto-rescan watcher and install-file routes ([b549ce5](https://github.com/raslan/reel/commit/b549ce5354a8855332862f134b00f61e3cca5d60))
+* **web:** add web manifest, icons and favicon ([91e8edc](https://github.com/raslan/reel/commit/91e8edcf540690bd34f7aa07d2a96eb53953e158))
+* **web:** timeline player bar, repeat modes, media session, hash routes and more sorts ([362efb4](https://github.com/raslan/reel/commit/362efb4c472227427791fea2e966f95efab989ee))
+
 ## [1.1.0](https://github.com/raslan/reel/compare/v1.0.0...v1.1.0) (2026-09-09)
 
 
