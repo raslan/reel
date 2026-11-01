@@ -9,6 +9,9 @@ dist/
 public/*
 !public/.gitkeep
 
+# Brainstorming mockups (visual companion)
+.superpowers/
+
 # Potential AI related files
 AGENTS.md
 CLAUDE.md

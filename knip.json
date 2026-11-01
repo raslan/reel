@@ -4,8 +4,7 @@
     ".": {
       "entry": [
         "server/test/**/*.test.ts",
-        "web/src/**/*.test.ts",
-        "test/**/*.test.ts"
+        "web/src/**/*.test.{ts,tsx}"
       ],
       "ignoreDependencies": [
         "shadcn"
