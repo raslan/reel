@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS peaks (
   buckets INTEGER NOT NULL,
   data    BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS folder_aliases (
+  path       TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  updated_at REAL NOT NULL
+);
 `;
 
 export function openDb(path: string): Database {
@@ -243,14 +248,40 @@ export function deleteStalePeaks(db: Database): void {
   `);
 }
 
+/* ---------- folder aliases ---------- */
+
+/** Display names for folders, keyed by relative folder path. */
+export function folderAliases(db: Database): Record<string, string> {
+  const rows = db.query("SELECT path, name FROM folder_aliases").all() as {
+    path: string;
+    name: string;
+  }[];
+  return Object.fromEntries(rows.map((r) => [r.path, r.name]));
+}
+
+/** Set (or replace) the display name for a folder path. */
+export function setFolderAlias(db: Database, path: string, name: string): void {
+  db.prepare(
+    `INSERT INTO folder_aliases (path, name, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(path) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`,
+  ).run(path, name, Date.now() / 1000);
+}
+
+/** Restore a folder's real name. Deleting an unknown path is a no-op. */
+export function deleteFolderAlias(db: Database, path: string): void {
+  db.prepare("DELETE FROM folder_aliases WHERE path = ?").run(path);
+}
+
 /**
- * Wipe all indexed data — files, favorites, peaks — as if the library never
- * existed. The DB file itself stays on disk; a rescan rebuilds the index.
+ * Wipe all indexed data — files, favorites, peaks, folder display names — as if
+ * the library never existed. The DB file itself stays on disk; a rescan rebuilds
+ * the index.
  */
 export function clearDb(db: Database): void {
   db.transaction(() => {
     db.run("DELETE FROM files");
     db.run("DELETE FROM favorites");
     db.run("DELETE FROM peaks");
+    db.run("DELETE FROM folder_aliases");
   })();
 }
