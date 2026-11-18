@@ -1,8 +1,11 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, FolderX, SearchX } from "lucide-react";
+import { toast } from "sonner";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EmptyState } from "../components/EmptyState";
 import { FileRow } from "../components/FileRow";
 import { FolderRow } from "../components/FolderRow";
+import { FolderTitle } from "../components/FolderTitle";
 import { SearchInput } from "../components/SearchInput";
 import { SkeletonRows } from "../components/SkeletonRows";
 import { SortControl } from "../components/SortControl";
@@ -14,6 +17,8 @@ import { useFavoriteToggle } from "../hooks/useFavoriteToggle";
 import { useFolder } from "../hooks/useFolder";
 import { useFolderAliases } from "../hooks/useFolderAliases";
 import { useSearch } from "../hooks/useSearch";
+import { clearFolderAlias, errorMessage, setFolderAlias } from "../lib/api";
+import { folderAliasesKey } from "../lib/keys";
 import { folderLabel } from "../lib/path";
 import { sortFiles } from "../lib/sort";
 import { useAppDispatch, useAppState } from "../state/context";
@@ -33,6 +38,18 @@ export function LibraryScreen() {
   const aliasesQuery = useFolderAliases();
   const aliases = aliasesQuery.data?.aliases ?? {};
   const labelOf = (path: string) => folderLabel(aliases, path);
+  const qc = useQueryClient();
+  const invalidateAliases = () => void qc.invalidateQueries({ queryKey: folderAliasesKey });
+  const rename = useMutation({
+    mutationFn: ({ path, name }: { path: string; name: string }) => setFolderAlias(path, name),
+    onSuccess: invalidateAliases,
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const resetAlias = useMutation({
+    mutationFn: (path: string) => clearFolderAlias(path),
+    onSuccess: invalidateAliases,
+    onError: (err) => toast.error(errorMessage(err)),
+  });
   const debouncedQuery = useDebouncedValue(state.folderQuery, SEARCH_DEBOUNCE_MS);
   const search = useSearch(debouncedQuery, state.folderPath);
   // Keep showing the folder until the first results arrive instead of flashing a skeleton;
@@ -74,9 +91,18 @@ export function LibraryScreen() {
           onNavigate={(p) => dispatch({ type: "setFolderPath", path: p })}
         />
         <div className="flex items-baseline justify-between gap-3 mt-2.5">
-          <h1 className="font-display font-bold text-[26px] md:text-[30px] tracking-tight truncate">
-            {title}
-          </h1>
+          <FolderTitle
+            path={state.folderPath}
+            label={title}
+            realName={
+              state.folderPath === ""
+                ? "Library"
+                : (state.folderPath.split("/").pop() ?? state.folderPath)
+            }
+            busy={rename.isPending || resetAlias.isPending}
+            onRename={(name) => rename.mutateAsync({ path: state.folderPath, name })}
+            onReset={() => resetAlias.mutateAsync(state.folderPath)}
+          />
           <span className="font-mono text-[11px] text-dim/50 shrink-0">{currentLabel}</span>
         </div>
         <div className="flex items-center gap-3 mt-3 mb-2">
