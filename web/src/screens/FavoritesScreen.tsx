@@ -1,11 +1,13 @@
-import { Star, StarOff } from "lucide-react";
+import { Download, Star, StarOff } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { FileRow } from "../components/FileRow";
 import { SkeletonRows } from "../components/SkeletonRows";
+import { Button } from "../components/ui/button";
 import { VirtualRows } from "../components/VirtualRows";
 import { useAudio } from "../hooks/useAudio";
 import { useFavorites } from "../hooks/useFavorites";
 import { useFavoriteToggle } from "../hooks/useFavoriteToggle";
+import { downloadText, favoritesFileName, formatFavoritesText } from "../lib/export";
 import { sortFiles } from "../lib/sort";
 import { useAppState } from "../state/context";
 
@@ -15,6 +17,7 @@ export function FavoritesScreen() {
   const { toggle } = useFavoriteToggle();
   const favorites = useFavorites();
   const sorted = sortFiles(favorites.data?.files ?? [], state.sort);
+  const canExport = !favorites.isPending && !favorites.isError && sorted.length > 0;
 
   return (
     <div className="h-full flex flex-col">
@@ -23,9 +26,22 @@ export function FavoritesScreen() {
           <h1 className="font-display font-bold text-[26px] md:text-[30px] tracking-tight">
             Favorites
           </h1>
-          <span className="font-mono text-[11px] text-dim/50 shrink-0">
-            {favorites.data ? `${sorted.length} starred` : ""}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {canExport && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => downloadText(favoritesFileName(), formatFavoritesText(sorted))}
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export
+              </Button>
+            )}
+            <span className="font-mono text-[11px] text-dim/50">
+              {favorites.data ? `${sorted.length} starred` : ""}
+            </span>
+          </div>
         </div>
         <p className="text-[12px] text-dim/50 mt-1 mb-2">
           Files you starred, across all libraries.

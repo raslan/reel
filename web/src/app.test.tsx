@@ -216,6 +216,15 @@ describe("App smoke", () => {
     expect(text()).toContain("1 starred");
   });
 
+  it("offers an export button on the favorites page", async () => {
+    await goto("Favorites");
+    await until(() => text().includes("intro.mp3"));
+    const exportButton = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === "Export",
+    );
+    expect(exportButton).toBeDefined();
+  });
+
   it("global search doesn't hit the server until something is typed", async () => {
     await goto("Search");
     expect(text()).toContain("Search your library");
