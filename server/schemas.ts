@@ -27,3 +27,28 @@ export const searchQuery = z.object({
     .default(DEFAULT_SEARCH_LIMIT)
     .transform((n) => Math.min(n, MAX_SEARCH_LIMIT)),
 });
+
+/**
+ * A folder path that is safe to store: relative, at least one segment, no
+ * empty / `.` / `..` segments. The root ("") is not renameable.
+ */
+export const folderAliasPath = z
+  .string()
+  .min(1, "path is required")
+  .max(500, "path is too long")
+  .refine(
+    // Empty is reported by `.min(1)`; don't pile a second issue on it.
+    (p) =>
+      p === "" ||
+      (!p.startsWith("/") &&
+        !p.endsWith("/") &&
+        p.split("/").every((s) => s !== "" && s !== "." && s !== "..")),
+    "invalid folder path",
+  );
+
+export const folderAliasBody = z.object({
+  path: folderAliasPath,
+  name: z.string().trim().min(1, "name is required").max(120, "name is too long"),
+});
+
+export const folderAliasQuery = z.object({ path: folderAliasPath });

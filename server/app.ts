@@ -6,6 +6,7 @@ import { errFields, log } from "./log";
 import { browseRoutes } from "./routes/browse";
 import { eventsRoutes } from "./routes/events";
 import { favoritesRoutes } from "./routes/favorites";
+import { folderAliasRoutes } from "./routes/folders";
 import { maintenanceRoutes } from "./routes/maintenance";
 import { peaksRoutes } from "./routes/peaks";
 
@@ -45,6 +46,7 @@ export function createApp(ctx: AppCtx): Hono<AppEnv> {
   app.get("/api/health", (c) => c.json({ ok: true }));
   app.route("/", browseRoutes(ctx));
   app.route("/", favoritesRoutes(ctx));
+  app.route("/", folderAliasRoutes(ctx));
   app.route("/", peaksRoutes(ctx));
   app.route("/", maintenanceRoutes(ctx));
   app.route("/", eventsRoutes(ctx));

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   type FavoritesBody,
+  type FolderAliasesBody,
   json,
   type LibrariesBody,
   type ListBody,
@@ -529,6 +530,96 @@ describe("POST /api/clear", () => {
       await s.rescanService.whenIdle();
       const list = await json<ListBody>(await fetch(`${s.base}/api/list?path=Podcasts`));
       expect(list.files.length).toBe(1);
+    } finally {
+      await s.cleanup();
+    }
+  });
+});
+
+describe("folder aliases", () => {
+  const aliases = async (base: string) =>
+    (await json<FolderAliasesBody>(await fetch(`${base}/api/folder-aliases`))).aliases;
+
+  test("empty by default; set, overwrite and delete round-trip; a rescan leaves them intact", async () => {
+    const s = await makeStack({ files: { "Podcasts/Comedy/a.mp3": "x" } });
+    try {
+      await s.rescan("Podcasts");
+      expect(await aliases(s.base)).toEqual({});
+
+      expect(
+        (
+          await postJson(s.base, "/api/folder-aliases", {
+            path: "Podcasts/Comedy",
+            name: "  Standup  ",
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (await postJson(s.base, "/api/folder-aliases", { path: "Podcasts", name: "Shows" }))
+          .status,
+      ).toBe(200);
+      // The name is trimmed on the way in.
+      expect(await aliases(s.base)).toEqual({ Podcasts: "Shows", "Podcasts/Comedy": "Standup" });
+
+      // Overwrite replaces the value and is idempotent.
+      expect(
+        (await postJson(s.base, "/api/folder-aliases", { path: "Podcasts", name: "Audio" }))
+          .status,
+      ).toBe(200);
+      expect((await aliases(s.base)).Podcasts).toBe("Audio");
+
+      // A rescan rewrites the file index but must not touch aliases.
+      await s.rescan("Podcasts");
+      expect(await aliases(s.base)).toEqual({ Podcasts: "Audio", "Podcasts/Comedy": "Standup" });
+
+      const del = await fetch(`${s.base}/api/folder-aliases?path=Podcasts%2FComedy`, {
+        method: "DELETE",
+      });
+      expect(del.status).toBe(200);
+      expect(await aliases(s.base)).toEqual({ Podcasts: "Audio" });
+    } finally {
+      await s.cleanup();
+    }
+  });
+
+  test("bad paths and names are 400s naming the offending field", async () => {
+    const s = await makeStack({});
+    try {
+      const cases: [{ path: string; name: string }, string][] = [
+        [{ path: "", name: "x" }, "path"],
+        [{ path: "/abs", name: "x" }, "path"],
+        [{ path: "trailing/", name: "x" }, "path"],
+        [{ path: "../escape", name: "x" }, "path"],
+        [{ path: "a//b", name: "x" }, "path"],
+        [{ path: "Podcasts", name: "   " }, "name"],
+        [{ path: "Podcasts", name: "x".repeat(121) }, "name"],
+      ];
+      for (const [body, field] of cases) {
+        const res = await postJson(s.base, "/api/folder-aliases", body);
+        expect(res.status).toBe(400);
+        const err = (await res.json()) as { error: string; issues: { field: string }[] };
+        expect(err.error).toBe("invalid request");
+        expect(err.issues.map((i) => i.field)).toEqual([field]);
+      }
+
+      // A body that isn't an object at all is the same 400.
+      expect((await postJson(s.base, "/api/folder-aliases")).status).toBe(400);
+      expect((await fetch(`${s.base}/api/folder-aliases?path=`, { method: "DELETE" })).status).toBe(
+        400,
+      );
+      expect(await aliases(s.base)).toEqual({});
+    } finally {
+      await s.cleanup();
+    }
+  });
+
+  test("clearing the library wipes aliases too", async () => {
+    const s = await makeStack({ files: { "Podcasts/a.mp3": "x" } });
+    try {
+      await s.rescan("Podcasts");
+      await postJson(s.base, "/api/folder-aliases", { path: "Podcasts", name: "Shows" });
+      expect((await postJson(s.base, "/api/clear")).status).toBe(200);
+      expect(await aliases(s.base)).toEqual({});
     } finally {
       await s.cleanup();
     }
