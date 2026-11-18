@@ -129,6 +129,9 @@ export interface SearchBody {
 export interface FavoritesBody {
   files: FileEntry[];
 }
+export interface FolderAliasesBody {
+  aliases: Record<string, string>;
+}
 export interface ListBody {
   folders: { name: string; path: string }[];
   files: FileEntry[];

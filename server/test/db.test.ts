@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   addFavorite,
+  clearDb,
+  deleteFolderAlias,
   deleteLibraryFiles,
   deleteStalePeaks,
   childFolders,
@@ -13,6 +15,7 @@ import {
   favoriteFiles,
   filesByLibrary,
   filesWithNullDuration,
+  folderAliases,
   folderFiles,
   getPeaks,
   indexedLibraries,
@@ -20,6 +23,7 @@ import {
   removeFavorite,
   replaceLibraryFiles,
   searchFiles,
+  setFolderAlias,
   setPeaks,
   upsertFiles,
 } from "../db";
@@ -48,7 +52,7 @@ const row = (over: Partial<FileRow> = {}): FileRow => ({
 });
 
 describe("db schema", () => {
-  test("creates files, favorites, peaks", async () => {
+  test("creates files, favorites, peaks, folder aliases", async () => {
     const { db, cleanup } = await tempDb();
     try {
       const tables = (
@@ -56,7 +60,9 @@ describe("db schema", () => {
       )
         .map((r) => r.name)
         .sort();
-      expect(tables).toEqual(expect.arrayContaining(["files", "favorites", "peaks"]));
+      expect(tables).toEqual(
+        expect.arrayContaining(["files", "favorites", "peaks", "folder_aliases"]),
+      );
     } finally {
       await cleanup();
     }
@@ -244,6 +250,41 @@ describe("peaks", () => {
       upsertFiles(db, [row({ mtime: 200 })]); // file changed → peaks stale
       deleteStalePeaks(db);
       expect(getPeaks(db, "Podcasts/ep-12.mp3")).toBeNull();
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("folder aliases", () => {
+  test("round-trip through the table, then clear with the index", async () => {
+    const { db, cleanup } = await tempDb();
+    try {
+      expect(folderAliases(db)).toEqual({});
+
+      setFolderAlias(db, "Podcasts", "Shows");
+      setFolderAlias(db, "Podcasts/Comedy", "Standup");
+      expect(folderAliases(db)).toEqual({
+        Podcasts: "Shows",
+        "Podcasts/Comedy": "Standup",
+      });
+
+      // Setting the same path again replaces rather than duplicates.
+      setFolderAlias(db, "Podcasts", "Audio");
+      expect(folderAliases(db)).toEqual({
+        Podcasts: "Audio",
+        "Podcasts/Comedy": "Standup",
+      });
+
+      deleteFolderAlias(db, "Podcasts/Comedy");
+      expect(folderAliases(db)).toEqual({ Podcasts: "Audio" });
+
+      // Deleting something absent is a no-op, not an error.
+      deleteFolderAlias(db, "Ghost");
+      expect(folderAliases(db)).toEqual({ Podcasts: "Audio" });
+
+      clearDb(db);
+      expect(folderAliases(db)).toEqual({});
     } finally {
       await cleanup();
     }

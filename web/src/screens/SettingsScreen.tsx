@@ -85,8 +85,8 @@ export function SettingsScreen() {
               <div className="flex-1 min-w-0">
                 <div className="text-[13.5px] font-medium">Clear library</div>
                 <div className="text-[12px] text-dim/50 mt-0.5">
-                  Wipes the index, favorites, and cached peaks — as if the library never existed.
-                  Files on disk are untouched; rescan to rebuild.
+                  Wipes the index, favorites, display names, and cached peaks — as if the library
+                  never existed. Files on disk are untouched; rescan to rebuild.
                 </div>
               </div>
               <Button
@@ -95,7 +95,7 @@ export function SettingsScreen() {
                 onClick={() => {
                   if (
                     !window.confirm(
-                      "Clear the library? The index, favorites, and cached peaks are removed. Your files on disk are untouched.",
+                      "Clear the library? The index, favorites, display names, and cached peaks are removed. Your files on disk are untouched.",
                     )
                   )
                     return;

@@ -15,6 +15,11 @@ export interface FavoritesResponse {
   files: FileEntry[];
 }
 
+export interface FolderAliasesResponse {
+  /** Display name, keyed by relative folder path. */
+  aliases: Record<string, string>;
+}
+
 export interface OkResponse {
   ok: boolean;
 }
