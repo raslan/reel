@@ -12,7 +12,9 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useFavoritePaths } from "../hooks/useFavoritePaths";
 import { useFavoriteToggle } from "../hooks/useFavoriteToggle";
 import { useFolder } from "../hooks/useFolder";
+import { useFolderAliases } from "../hooks/useFolderAliases";
 import { useSearch } from "../hooks/useSearch";
+import { folderLabel } from "../lib/path";
 import { sortFiles } from "../lib/sort";
 import { useAppDispatch, useAppState } from "../state/context";
 import type { FileEntry, FolderEntry } from "../types/library";
@@ -28,6 +30,9 @@ export function LibraryScreen() {
   const { toggle } = useFavoriteToggle();
   const favSet = useFavoritePaths();
   const folder = useFolder(state.folderPath);
+  const aliasesQuery = useFolderAliases();
+  const aliases = aliasesQuery.data?.aliases ?? {};
+  const labelOf = (path: string) => folderLabel(aliases, path);
   const debouncedQuery = useDebouncedValue(state.folderQuery, SEARCH_DEBOUNCE_MS);
   const search = useSearch(debouncedQuery, state.folderPath);
   // Keep showing the folder until the first results arrive instead of flashing a skeleton;
@@ -37,12 +42,23 @@ export function LibraryScreen() {
   const isPending = folder.isPending;
   const isError = folder.isError || (typed && search.isError);
   const files = sortFiles((searching ? search.data?.files : folder.data?.files) ?? [], state.sort);
-  const folders = searching ? [] : (folder.data?.folders ?? []);
+  const folders = searching
+    ? []
+    : [...(folder.data?.folders ?? [])].sort((a, b) =>
+        labelOf(a.path).localeCompare(labelOf(b.path), undefined, { sensitivity: "base" }),
+      );
   const rows: Row[] = [
     ...folders.map((f) => ({ kind: "folder" as const, folder: f })),
     ...files.map((f) => ({ kind: "file" as const, file: f })),
   ];
-  const crumbs = state.folderPath === "" ? [] : state.folderPath.split("/");
+  const crumbs =
+    state.folderPath === ""
+      ? []
+      : state.folderPath.split("/").map((_, i, all) => {
+          const path = all.slice(0, i + 1).join("/");
+          return { label: labelOf(path), path };
+        });
+  const title = labelOf(state.folderPath);
   const total = search.data?.total ?? 0;
   const currentLabel = searching
     ? files.length < total
@@ -59,7 +75,7 @@ export function LibraryScreen() {
         />
         <div className="flex items-baseline justify-between gap-3 mt-2.5">
           <h1 className="font-display font-bold text-[26px] md:text-[30px] tracking-tight truncate">
-            {state.folderPath === "" ? "Library" : state.folderPath.split("/").pop()}
+            {title}
           </h1>
           <span className="font-mono text-[11px] text-dim/50 shrink-0">{currentLabel}</span>
         </div>
@@ -112,6 +128,7 @@ export function LibraryScreen() {
                   return (
                     <FolderRow
                       folder={row.folder}
+                      label={labelOf(row.folder.path)}
                       onOpen={(p) => dispatch({ type: "setFolderPath", path: p })}
                     />
                   );

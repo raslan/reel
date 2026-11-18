@@ -42,6 +42,7 @@ const intro = {
 
 let fetched: string[];
 let rescanStatus: unknown;
+let aliases: Record<string, string>;
 
 function route(url: string): unknown {
   const u = new URL(url, "http://localhost");
@@ -52,6 +53,8 @@ function route(url: string): unknown {
         : { folders: [{ name: "Podcasts", path: "Podcasts" }], files: [loose] };
     case "/api/favorites":
       return { files: [intro] };
+    case "/api/folder-aliases":
+      return { aliases };
     case "/api/search":
       return { files: [loose], total: 1 };
     case "/api/rescan":
@@ -105,6 +108,7 @@ const goto = (label: string) =>
 beforeEach(async () => {
   fetched = [];
   rescanStatus = { running: false, last: null };
+  aliases = {};
   FakeAudio.instances = [];
   localStorage.clear();
   window.history.replaceState(null, "", "#"); // routes live in the URL, which outlives a test
@@ -356,5 +360,28 @@ describe("App smoke", () => {
       await press("m");
       expect(audio.volume).toBe(1);
     });
+  });
+});
+
+describe("folder display names", () => {
+  const openFolder = (label: string) =>
+    flush(() => {
+      [...mounted.container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((b) => b.textContent === label)
+        ?.click();
+    });
+
+  it("shows aliases in rows and breadcrumbs while navigating by the real path", async () => {
+    aliases = { Podcasts: "Shows" };
+    mounted.unmount();
+    mounted = await mountApp(<App />);
+    await until(() => text().includes("Shows"));
+    expect(text()).not.toContain("Podcasts");
+
+    await openFolder("Shows");
+    await until(() => text().includes("intro.mp3"));
+    expect(fetched).toContain("/api/list?path=Podcasts");
+    expect(window.location.hash).toBe("#/library/Podcasts");
+    expect(text()).toContain("Shows"); // title and breadcrumb both use the alias
   });
 });
