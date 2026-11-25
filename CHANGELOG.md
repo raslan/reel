@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/raslan/reel/compare/v1.2.0...v1.3.0) (2026-11-25)
+
+
+### Features
+
+* **server:** expose folder alias api ([c7f2d24](https://github.com/raslan/reel/commit/c7f2d24f0d9b90e2169fcc587c595c637fb079f0))
+* **server:** store folder display names in sqlite ([129b199](https://github.com/raslan/reel/commit/129b19902803bc601bc81e5de3d4417b06ca81e8))
+* **web:** add favorites export helpers ([bf9cb08](https://github.com/raslan/reel/commit/bf9cb0867ca17ae089753120a6315fe54bf5a9cc))
+* **web:** add folder alias data layer ([babe9a3](https://github.com/raslan/reel/commit/babe9a3d339513e6cc032233a4a8295b30d0444c))
+* **web:** export favorites as text ([bc781c9](https://github.com/raslan/reel/commit/bc781c912639dfcf3bbd95d9c1cc2836d7449238))
+* **web:** rename folders from the title ([4e02fc1](https://github.com/raslan/reel/commit/4e02fc1a7dac9435f56a63ab0e0e28f34b40bee1))
+* **web:** show folder aliases in library labels ([f5d693c](https://github.com/raslan/reel/commit/f5d693c330a0ac8516f568fe9e0b4aa4747104bb))
+
 ## [1.2.0](https://github.com/raslan/reel/compare/v1.1.0...v1.2.0) (2026-11-01)
 
 
